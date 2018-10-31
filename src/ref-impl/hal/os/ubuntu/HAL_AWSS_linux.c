@@ -2,8 +2,147 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
+#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
+#include <assert.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <net/ethernet.h>
+#include <linux/wireless.h>
+#include <linux/if_packet.h>
+
 #include "iot_import.h"
+
+#define AWSS_IS_INVALID_MAC(mac) (((char *)(mac))[0] == 0 && ((char *)(mac))[1] == 0 && ((char *)(mac))[2] == 0 && \
+                                  ((char *)(mac))[3] == 0 && ((char *)(mac))[4] == 0 && ((char *)(mac))[5] == 0)
+#define AWSS_MAC_STR             "%02X:%02X:%02X:%02X:%02X:%02X"
+#define AWSS_MAC2STR(mac)        ((char *)(mac))[0], ((char *)(mac))[1], ((char *)(mac))[2],\
+                                 ((char *)(mac))[3], ((char *)(mac))[4], ((char *)(mac))[5]
+#define AWSS_PROC_NET_DEV        "/proc/net/dev"
+#define AWSS_MONITOR_DEV_NAME    "awss_mon"
+
+static char awss_dev_name[IFNAMSIZ + 1];
+static pthread_t awss_monitor_thread;
+static char awss_monitor_running;
+static char awss_dev_mac[6];
+
+/*
+ * Extract the interface name out of /proc/net/dev.
+ */
+static char * awss_get_ifname(
+        char *name,    /* Where to store the name */
+        int  nsize,    /* Size of name buffer */
+        char *buf)     /* Current position in buffer */
+{
+    char *end;
+
+    /* Skip leading spaces */
+    while (isspace(*buf)) buf ++;
+
+    /* Get name up to the last ':'. Aliases may contain ':' in them,
+     * but the last one should be the separator */
+    end = strrchr(buf, ':');
+
+    /* Not found ??? To big ??? */
+    if (end == NULL || (end - buf) + 1 > nsize)
+        return NULL;
+
+    /* Return value currently unused, just make sure it's non-NULL */
+    memcpy(name, buf, (end - buf));
+    name[end - buf] = '\0';
+
+    return end;
+}
+
+static int awss_get_dev_mac()
+{
+    struct ifreq ifr;
+    int skfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (skfd <= 0) {
+        perror("socket error!\n");
+        return -1;
+    }
+
+    strcpy(ifr.ifr_name, awss_dev_name);
+
+    if (ioctl(skfd, SIOCGIFHWADDR, &ifr) < 0) {
+        perror("ioctl SIOCGIFHWADDR error\n");
+        close(skfd);
+        return -1;
+    } else {
+        memcpy(awss_dev_mac, ifr.ifr_hwaddr.sa_data, sizeof(awss_dev_mac));
+    }
+
+    close(skfd);
+
+    return 0;
+}
+
+int awss_get_dev_name()
+{
+    char buff[256];
+    FILE *fh;
+    int skfd;
+
+    fh = fopen(AWSS_PROC_NET_DEV, "r");
+    if (fh == NULL) {
+        perror("get dev name open " AWSS_PROC_NET_DEV " fail\n");
+        return -1;
+    }
+
+    /* Try to open the socket, if success returns it */
+    skfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (skfd <= 0) {
+        perror("get dev name open socket fail\n");
+        return -1;
+    }
+
+    /* Read each device line */
+    while (fgets(buff, sizeof(buff), fh)) {
+        char name[IFNAMSIZ + 1];
+        char *s;
+
+        /* Skip empty or almost empty lines. It seems that in some
+         * cases fgets return a line with only a newline. */
+        if ((buff[0] == '\0') || (buff[1] == '\0'))
+            continue;
+
+        /* Extract interface name */
+        s = awss_get_ifname(name, sizeof(name), buff);
+        if (s) {
+            struct iwreq wrq;
+            strncpy(wrq.ifr_name, name, IFNAMSIZ);
+             /* if fail to get iw name about this interface
+              * the interface maybe not wireless interface
+              * skip the interface which is not wireless */
+            if (ioctl(skfd, SIOCGIWNAME, &wrq) < 0)
+                continue;
+            strncpy(awss_dev_name, name, sizeof(awss_dev_name));
+            awss_get_dev_mac();
+            break;
+        }
+    }
+#if 0
+    fprintf(stderr, "name: %s ", awss_dev_name);
+    fprintf(stderr, "%02x:%02x:%02x:%02x:%02x:%02x\n",
+            (unsigned char)awss_dev_mac[0], (unsigned char)awss_dev_mac[1],
+            (unsigned char)awss_dev_mac[2], (unsigned char)awss_dev_mac[3],
+            (unsigned char)awss_dev_mac[4], (unsigned char)awss_dev_mac[5]);
+#endif
+    close(skfd);
+    fclose(fh);
+
+    return AWSS_IS_INVALID_MAC(awss_dev_mac) ? -1 : 0;
+}
 
 /**
  * @brief   获取`smartconfig`服务的安全等级
@@ -53,7 +192,9 @@ int HAL_Awss_Get_Conn_Encrypt_Type()
  */
 char *HAL_Wifi_Get_Mac(_OU_ char mac_str[HAL_MAC_LEN])
 {
-    strcpy(mac_str, "18:FE:34:12:33:44");
+    if (AWSS_IS_INVALID_MAC(awss_dev_mac))
+        return NULL;
+    snprintf(mac_str, HAL_MAC_LEN, AWSS_MAC_STR, AWSS_MAC2STR(awss_dev_mac));
     return mac_str;
 }
 
@@ -79,6 +220,111 @@ int HAL_Awss_Get_Channelscan_Interval_Ms(void)
     return 250;
 }
 
+int awss_open_monitor_socket(void)
+{
+    struct sockaddr_ll ll;
+    struct ifreq ifr;
+    int sockopt = 1;
+    int fd;
+
+    if (getuid() != 0)
+        perror("root privilege needed!\n");
+
+    //create a raw socket that shall sniff
+    fd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    assert(fd >= 0);
+
+    memset(&ifr, 0, sizeof(ifr));
+
+    if (awss_dev_name[0] == '\0') {
+        perror("dev name is invalid");
+        goto exit;
+    }
+    /* set interface to promiscuous mode */
+    strncpy(ifr.ifr_name, AWSS_MONITOR_DEV_NAME, sizeof(ifr.ifr_name));
+    if (ioctl(fd, SIOCGIFFLAGS, &ifr) < 0) {
+        perror("ioctl(SIOCGIFFLAGS) fail");
+        goto exit;
+    }
+    ifr.ifr_flags |= IFF_PROMISC;
+    if (ioctl(fd, SIOCSIFFLAGS, &ifr) < 0) {
+        perror("ioctl(SIOCSIFFLAGS) fail");
+        goto exit;
+    }
+
+    /* allow the socket to be reused */
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+                   &sockopt, sizeof(sockopt)) < 0) {
+        perror("setsockopt(SO_REUSEADDR) fail");
+        goto exit;
+    }
+
+    /* bind to device */
+    memset(&ll, 0, sizeof(ll));
+    ll.sll_family = PF_PACKET;
+    ll.sll_protocol = htons(ETH_P_ALL);
+    ll.sll_ifindex = if_nametoindex(awss_dev_name);
+    if (bind(fd, (struct sockaddr *)&ll, sizeof(ll)) < 0) {
+        perror("bind[PF_PACKET] failed");
+        goto exit;
+    }
+
+    return fd;
+exit:
+    close(fd);
+    exit(EXIT_FAILURE);
+}
+
+void *awss_monitor_thread_func(void *arg)
+{
+    awss_recv_80211_frame_cb_t ieee80211_handler = (awss_recv_80211_frame_cb_t)arg;
+    /* buffer to hold the 80211 frame */
+    char *ether_frame = malloc(IP_MAXPACKET);
+    assert(ether_frame);
+
+    int fd = awss_open_monitor_socket();
+    int len, ret;
+    fd_set rfds;
+    struct timeval tv;
+
+    while (awss_monitor_running) {
+        FD_ZERO(&rfds);
+        FD_SET(fd, &rfds);
+
+        tv.tv_sec = 0;
+        tv.tv_usec = 100 * 1000;//100ms
+
+        ret = select(fd + 1, &rfds, NULL, NULL, &tv);
+        assert(ret >= 0);
+
+        if (!ret)
+            continue;
+
+        //memset(ether_frame, 0, IP_MAXPACKET);
+        len = recv(fd, ether_frame, IP_MAXPACKET, 0);
+        if (len < 0) {
+            perror ("recv() failed:");
+            //Something weird happened
+            continue;
+        }
+
+        /*
+         * Note: use tcpdump -i wlan0 -w file.pacp to check link type and FCS
+         */
+
+        /* rtl8188: include 80211 FCS field(4 byte) */
+        int with_fcs = 1;
+        /* rtl8188: link-type IEEE802_11_RADIO (802.11 plus radiotap header) */
+        int link_type = AWSS_LINK_TYPE_80211_RADIO;
+
+        (*ieee80211_handler)(ether_frame, len, link_type, with_fcs, 0);
+    }
+
+    free(ether_frame);
+    close(fd);
+
+    return NULL;
+}
 /**
  * @brief   设置Wi-Fi网卡工作在监听(Monitor)模式, 并在收到802.11帧的时候调用被传入的回调函数
  *
@@ -86,6 +332,25 @@ int HAL_Awss_Get_Channelscan_Interval_Ms(void)
  */
 void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
 {
+    char buf[256];
+    int ret;
+
+    snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type monitor", AWSS_MONITOR_DEV_NAME);
+    ret = system(buf);
+
+    snprintf(buf, sizeof(buf), "sudo ifconfig %s down", awss_dev_name);
+    ret = system(buf);
+
+    snprintf(buf, sizeof(buf), "sudo iw dev %s del", awss_dev_name);
+    ret = system(buf);
+
+    snprintf(buf, sizeof(buf), "ifconfig %s up", AWSS_MONITOR_DEV_NAME);
+    ret = system(buf);
+
+    awss_monitor_running = 1;
+
+    ret = pthread_create(&awss_monitor_thread, NULL, awss_monitor_thread_func, cb);
+    assert(!ret);
 }
 
 /**
@@ -93,6 +358,27 @@ void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
  */
 void HAL_Awss_Close_Monitor(void)
 {
+    char buf[256];
+
+    awss_monitor_running = 0;
+
+    pthread_join(awss_monitor_thread, NULL);
+
+    snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type managed", awss_dev_name);
+    if (system(buf) != 0)
+        perror("system fail\n");
+
+    snprintf(buf, sizeof(buf), "ifconfig %s down", AWSS_MONITOR_DEV_NAME);
+    if (system(buf) != 0)
+        perror("system fail\n");
+
+    snprintf(buf, sizeof(buf), "sudo iw dev %s del", AWSS_MONITOR_DEV_NAME);
+    if (system(buf) != 0)
+        perror("system fail\n");
+
+    snprintf(buf, sizeof(buf), "ifconfig %s up", awss_dev_name);
+    if (system(buf) != 0)
+        perror("system fail\n");
 }
 
 /**
@@ -109,6 +395,10 @@ void HAL_Awss_Switch_Channel(
             _IN_OPT_ char secondary_channel,
             _IN_OPT_ uint8_t bssid[ETH_ALEN])
 {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "iwconfig %s channel %d", AWSS_MONITOR_DEV_NAME, primary_channel);
+    if (system(buf) != 0)
+        perror("system fail\n");
 }
 
 /**
@@ -140,7 +430,37 @@ int HAL_Awss_Connect_Ap(
             _IN_OPT_ uint8_t bssid[ETH_ALEN],
             _IN_OPT_ uint8_t channel)
 {
-    return 0;
+    int ret;
+    char buf[256];
+    uint64_t cur, time = HAL_UptimeMs();
+
+    snprintf(buf, sizeof(buf), "ifconfig %s up", awss_dev_name);
+    ret = system(buf);
+
+    snprintf(buf, sizeof(buf), "wpa_cli -i %s status | grep 'wpa_state=COMPLETED'", awss_dev_name);
+    do {
+        ret = system(buf);
+        cur = HAL_UptimeMs();
+        if (cur - time > connection_timeout_ms)
+            break;
+        usleep(100 * 1000);
+    } while (ret);
+
+    cur = HAL_UptimeMs();
+    if (cur - time > connection_timeout_ms)
+        return -1;
+
+    snprintf(buf, sizeof(buf), "udhcpc -i %s", awss_dev_name);
+    ret = system(buf);
+
+    //TODO: wait dhcp ready here
+    while (HAL_Sys_Net_Is_Ready() == 0) {
+        cur = HAL_UptimeMs();
+        if (cur - time > connection_timeout_ms)
+            break;
+        usleep(100 * 1000);
+    }
+    return HAL_Sys_Net_Is_Ready() ? 0 : -1;
 }
 
 /**
@@ -153,7 +473,24 @@ int HAL_Awss_Connect_Ap(
  */
 int HAL_Sys_Net_Is_Ready()
 {
-    return 0;
+    struct ifreq ifr;
+
+    int sock = socket(AF_INET,SOCK_DGRAM,0);
+    if (sock <= 0) {
+        perror("socket error!\n");
+        return 0;
+    }
+
+    strncpy(ifr.ifr_name, awss_dev_name, IFNAMSIZ);
+
+    if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
+        perror("ioctl (SIOCGIFADDR) error\n");
+        close(sock);
+        return 0;
+    }
+
+    close(sock);
+    return 1;
 }
 
 /**
