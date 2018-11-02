@@ -26,6 +26,7 @@ int main(int argc, char **argv)
     HAL_SetDeviceName(DEVICE_NAME);
     HAL_SetDeviceSecret(DEVICE_SECRET);
 
+    IOT_SetLogLevel(IOT_LOG_DEBUG);
     awss_config_press();
     awss_start();
     linkkit_main((void *)&paras);

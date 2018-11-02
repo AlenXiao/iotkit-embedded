@@ -33,6 +33,14 @@ static pthread_t awss_monitor_thread;
 static char awss_monitor_running;
 static char awss_dev_mac[6];
 
+static void awss_system(const char *buf)
+{
+    if (buf == NULL)
+        return;
+    if (system(buf))
+        printf("cmd %s fail\n", buf);
+}
+
 /*
  * Extract the interface name out of /proc/net/dev.
  */
@@ -339,16 +347,16 @@ void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
     assert(!ret);
 
     snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type monitor", AWSS_MONITOR_DEV_NAME);
-    ret = system(buf);
+    awss_system(buf);
 
     snprintf(buf, sizeof(buf), "sudo ifconfig %s down", awss_dev_name);
-    ret = system(buf);
+    awss_system(buf);
 
     snprintf(buf, sizeof(buf), "sudo iw dev %s del", awss_dev_name);
-    ret = system(buf);
+    awss_system(buf);
 
-    snprintf(buf, sizeof(buf), "ifconfig %s up", AWSS_MONITOR_DEV_NAME);
-    ret = system(buf);
+    snprintf(buf, sizeof(buf), "sudo ifconfig %s up", AWSS_MONITOR_DEV_NAME);
+    awss_system(buf);
 
     awss_monitor_running = 1;
 
@@ -368,20 +376,16 @@ void HAL_Awss_Close_Monitor(void)
     pthread_join(awss_monitor_thread, NULL);
 
     snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type managed", awss_dev_name);
-    if (system(buf) != 0)
-        perror("system fail\n");
+    awss_system(buf);
 
-    snprintf(buf, sizeof(buf), "ifconfig %s down", AWSS_MONITOR_DEV_NAME);
-    if (system(buf) != 0)
-        perror("system fail\n");
+    snprintf(buf, sizeof(buf), "sudo ifconfig %s down", AWSS_MONITOR_DEV_NAME);
+    awss_system(buf);
 
     snprintf(buf, sizeof(buf), "sudo iw dev %s del", AWSS_MONITOR_DEV_NAME);
-    if (system(buf) != 0)
-        perror("system fail\n");
+    awss_system(buf);
 
-    snprintf(buf, sizeof(buf), "ifconfig %s up", awss_dev_name);
-    if (system(buf) != 0)
-        perror("system fail\n");
+    snprintf(buf, sizeof(buf), "sudo ifconfig %s up", awss_dev_name);
+    awss_system(buf);
 }
 
 /**
@@ -399,9 +403,8 @@ void HAL_Awss_Switch_Channel(
             _IN_OPT_ uint8_t bssid[ETH_ALEN])
 {
     char buf[256];
-    snprintf(buf, sizeof(buf), "iwconfig %s channel %d", AWSS_MONITOR_DEV_NAME, primary_channel);
-    if (system(buf) != 0)
-        perror("system fail\n");
+    snprintf(buf, sizeof(buf), "sudo iwconfig %s channel %d", AWSS_MONITOR_DEV_NAME, primary_channel);
+    awss_system(buf);
 }
 
 /**
@@ -433,35 +436,28 @@ int HAL_Awss_Connect_Ap(
             _IN_OPT_ uint8_t bssid[ETH_ALEN],
             _IN_OPT_ uint8_t channel)
 {
-    int ret;
     char buf[256];
     uint64_t cur, time = HAL_UptimeMs();
 
-    snprintf(buf, sizeof(buf), "ifconfig %s up", awss_dev_name);
-    ret = system(buf);
+    snprintf(buf, sizeof(buf), "sudo ifconfig %s up", awss_dev_name);
+    awss_system(buf);
 
-    snprintf(buf, sizeof(buf), "wpa_cli -i %s status | grep 'wpa_state=COMPLETED'", awss_dev_name);
-    do {
-        ret = system(buf);
-        cur = HAL_UptimeMs();
-        if (cur - time > connection_timeout_ms)
-            break;
-        usleep(100 * 1000);
-    } while (ret);
+    usleep(4000 * 1000);
+
+    snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s", ssid, passwd);
+    awss_system(buf);
 
     cur = HAL_UptimeMs();
     if (cur - time > connection_timeout_ms)
         return -1;
 
-    snprintf(buf, sizeof(buf), "udhcpc -i %s", awss_dev_name);
-    ret = system(buf);
-
+    usleep(4000 * 1000);
     //TODO: wait dhcp ready here
     while (HAL_Sys_Net_Is_Ready() == 0) {
         cur = HAL_UptimeMs();
         if (cur - time > connection_timeout_ms)
             break;
-        usleep(100 * 1000);
+        usleep(1000 * 1000);
     }
     return HAL_Sys_Net_Is_Ready() ? 0 : -1;
 }
@@ -587,21 +583,32 @@ int HAL_Wifi_Get_Ap_Info(
             _OU_ char passwd[HAL_MAX_PASSWD_LEN],
             _OU_ uint8_t bssid[ETH_ALEN])
 {
-    struct ifreq ifr;
+    int ret = -1;
+    struct iwreq wrq;
+    char ssid_buf[HAL_MAX_SSID_LEN + 1] = {0};
+
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock <= 0) {
-        perror("socket error!\n");
-        return -1;
-    }
+    if (sock <= 0)
+        goto GET_AP_INFO_ERR;
 
-    strncpy(ifr.ifr_name, awss_dev_name, IFNAMSIZ);
+    strncpy(wrq.ifr_name, awss_dev_name, IFNAMSIZ);
 
-    if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
-        perror("ioctl (SIOCGIFADDR) error\n");
-        close(sock);
-        return -1;
-    }
+    if (ioctl(sock, SIOCGIWAP, &wrq) < 0)
+        goto GET_AP_INFO_ERR;
+    if (bssid)
+        memcpy(bssid, wrq.u.ap_addr.sa_data, ETH_ALEN);
 
-    close(sock);
-    return 0;
+    wrq.u.essid.pointer = (caddr_t)ssid_buf;
+    wrq.u.essid.length = HAL_MAX_SSID_LEN + 1;
+    wrq.u.essid.flags = 0;
+    if (ioctl(sock, SIOCGIWESSID, &wrq) < 0)
+        goto GET_AP_INFO_ERR;
+
+    if (ssid)
+        strncpy(ssid, ssid_buf, HAL_MAX_SSID_LEN);
+    ret = 0;
+
+GET_AP_INFO_ERR:
+    if (sock > 0) close(sock);
+    return ret;
 }
