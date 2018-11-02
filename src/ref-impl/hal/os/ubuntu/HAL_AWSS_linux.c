@@ -347,7 +347,14 @@ void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
     int ret;
 
     ret = awss_get_dev_name();
-    assert(!ret);
+    if (ret) {
+        strncpy(awss_dev_name, "wlan0", sizeof(awss_dev_name));
+        snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type managed", awss_dev_name);
+        awss_system(buf);
+        snprintf(buf, sizeof(buf), "sudo ifconfig %s up", awss_dev_name);
+        awss_system(buf);
+        awss_get_dev_name();
+    }
 
     snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type monitor", AWSS_MONITOR_DEV_NAME);
     awss_system(buf);
