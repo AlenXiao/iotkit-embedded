@@ -90,7 +90,8 @@ static int8_t awss_parse_radiotap_field(struct cpack_state *s, uint32_t bit, uin
             rc = cpack_int8(s, &rssi_dbm);
             if (rc != 0)
                 goto trunc;
-            return rssi_dbm > 0 ? rssi_dbm - 128 : rssi_dbm;
+            //return rssi_dbm > 0 ? rssi_dbm - 128 : rssi_dbm;
+            return rssi_dbm > 0 ? rssi_dbm - 256: rssi_dbm;
             break;
         }
 
