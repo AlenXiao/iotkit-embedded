@@ -13,6 +13,7 @@
 typedef struct {
     mbedtls_aes_context ctx;
     uint8_t iv[16];
+    uint8_t key[16];
 } platform_aes_t;
 
 p_HAL_Aes128_t HAL_Aes128_Init(
@@ -38,6 +39,7 @@ p_HAL_Aes128_t HAL_Aes128_Init(
 
     if (ret == 0) {
         memcpy(p_aes128->iv, iv, 16);
+        memcpy(p_aes128->key, key, 16);
     }else {
         free(p_aes128);
         p_aes128 = NULL;
@@ -131,6 +133,7 @@ int HAL_Aes128_Cfb_Decrypt(
 
     if(!aes || !src || !dst) return ret;
 
+    ret = mbedtls_aes_setkey_enc(&p_aes128->ctx, p_aes128->key, 128);
     ret = mbedtls_aes_crypt_cfb128(&p_aes128->ctx, MBEDTLS_AES_DECRYPT, length,
                                    &offset, p_aes128->iv, src, dst);
     return ret;

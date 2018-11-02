@@ -335,6 +335,9 @@ void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
     char buf[256];
     int ret;
 
+    ret = awss_get_dev_name();
+    assert(!ret);
+
     snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type monitor", AWSS_MONITOR_DEV_NAME);
     ret = system(buf);
 
@@ -475,7 +478,7 @@ int HAL_Sys_Net_Is_Ready()
 {
     struct ifreq ifr;
 
-    int sock = socket(AF_INET,SOCK_DGRAM,0);
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock <= 0) {
         perror("socket error!\n");
         return 0;
@@ -584,5 +587,21 @@ int HAL_Wifi_Get_Ap_Info(
             _OU_ char passwd[HAL_MAX_PASSWD_LEN],
             _OU_ uint8_t bssid[ETH_ALEN])
 {
+    struct ifreq ifr;
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock <= 0) {
+        perror("socket error!\n");
+        return -1;
+    }
+
+    strncpy(ifr.ifr_name, awss_dev_name, IFNAMSIZ);
+
+    if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
+        perror("ioctl (SIOCGIFADDR) error\n");
+        close(sock);
+        return -1;
+    }
+
+    close(sock);
     return 0;
 }
