@@ -320,12 +320,15 @@ void *awss_monitor_thread_func(void *arg)
          * Note: use tcpdump -i wlan0 -w file.pacp to check link type and FCS
          */
 
-        /* rtl8188: include 80211 FCS field(4 byte) */
         int with_fcs = 1;
-        /* rtl8188: link-type IEEE802_11_RADIO (802.11 plus radiotap header) */
+        int8_t rssi = -1;
+        /* link-type IEEE802_11_RADIO (802.11 plus radiotap header) */
         int link_type = AWSS_LINK_TYPE_80211_RADIO;
 
-        (*ieee80211_handler)(ether_frame, len, link_type, with_fcs, 0);
+        extern int awss_parse_ieee802_11_radio_header(const char *, int, int8_t *);
+        awss_parse_ieee802_11_radio_header(ether_frame, len, &rssi);
+
+        (*ieee80211_handler)(ether_frame, len, link_type, with_fcs, rssi);
     }
 
     free(ether_frame);
@@ -442,21 +445,18 @@ int HAL_Awss_Connect_Ap(
     snprintf(buf, sizeof(buf), "sudo ifconfig %s up", awss_dev_name);
     awss_system(buf);
 
-    usleep(4000 * 1000);
-
     snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s", ssid, passwd);
-    awss_system(buf);
 
     cur = HAL_UptimeMs();
     if (cur - time > connection_timeout_ms)
         return -1;
 
-    usleep(4000 * 1000);
     //TODO: wait dhcp ready here
     while (HAL_Sys_Net_Is_Ready() == 0) {
         cur = HAL_UptimeMs();
         if (cur - time > connection_timeout_ms)
             break;
+        awss_system(buf);
         usleep(1000 * 1000);
     }
     return HAL_Sys_Net_Is_Ready() ? 0 : -1;
@@ -483,7 +483,6 @@ int HAL_Sys_Net_Is_Ready()
     strncpy(ifr.ifr_name, awss_dev_name, IFNAMSIZ);
 
     if (ioctl(sock, SIOCGIFADDR, &ifr) < 0) {
-        perror("ioctl (SIOCGIFADDR) error\n");
         close(sock);
         return 0;
     }
