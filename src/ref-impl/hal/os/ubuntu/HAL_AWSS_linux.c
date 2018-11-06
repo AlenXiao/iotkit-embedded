@@ -23,15 +23,22 @@
 #define AWSS_IS_INVALID_MAC(mac) (((char *)(mac))[0] == 0 && ((char *)(mac))[1] == 0 && ((char *)(mac))[2] == 0 && \
                                   ((char *)(mac))[3] == 0 && ((char *)(mac))[4] == 0 && ((char *)(mac))[5] == 0)
 #define AWSS_MAC_STR             "%02X:%02X:%02X:%02X:%02X:%02X"
-#define AWSS_MAC2STR(mac)        ((char *)(mac))[0], ((char *)(mac))[1], ((char *)(mac))[2],\
-                                 ((char *)(mac))[3], ((char *)(mac))[4], ((char *)(mac))[5]
+#define AWSS_MAC2STR(mac)        (((char *)(mac))[0]) & 0xFF, (((char *)(mac))[1]) & 0xFF, (((char *)(mac))[2]) & 0xFF,\
+                                 (((char *)(mac))[3]) & 0xFF, (((char *)(mac))[4]) & 0xFF, (((char *)(mac))[5]) & 0xFF
 #define AWSS_PROC_NET_DEV        "/proc/net/dev"
 #define AWSS_MONITOR_DEV_NAME    "awss_mon"
+#define AWSS_AP_RECORD_KEY       "awss_ap_record"
+
+struct awss_ap_record_t {
+    uint8_t bssid[ETH_ALEN];
+    char ssid[HAL_MAX_SSID_LEN];
+    char passwd[HAL_MAX_PASSWD_LEN];
+};
 
 static char awss_dev_name[IFNAMSIZ + 1];
 static pthread_t awss_monitor_thread;
 static char awss_monitor_running;
-static char awss_dev_mac[6];
+static char awss_dev_mac[ETH_ALEN];
 
 static void awss_system(const char *buf)
 {
@@ -425,6 +432,35 @@ void HAL_Awss_Switch_Channel(
     awss_system(buf);
 }
 
+int awss_connect_last_ap()
+{
+    int ret = -1;
+    struct awss_ap_record_t last_ap;
+    int len = sizeof(struct awss_ap_record_t);
+
+    do {
+        uint8_t bcast_bssid[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+        memset(&last_ap, 0, sizeof(last_ap));
+
+        if (HAL_Kv_Get(AWSS_AP_RECORD_KEY, &last_ap, &len) != 0)
+            break;
+
+        if (awss_get_dev_name() != 0)
+            break;
+
+        if (memcmp(last_ap.bssid, bcast_bssid, ETH_ALEN) == 0)  // invalid bssid
+            memset(last_ap.bssid, 0, ETH_ALEN);
+
+        if (HAL_Awss_Connect_Ap(30000, last_ap.ssid, last_ap.passwd, 0, 0, last_ap.bssid, 0) != 0)
+            break;
+
+        ret = 0;
+    } while (0);
+
+    return ret;
+}
+
 /**
  * @brief   要求Wi-Fi网卡连接指定热点(Access Point)的函数
  *
@@ -454,13 +490,32 @@ int HAL_Awss_Connect_Ap(
             _IN_OPT_ uint8_t bssid[ETH_ALEN],
             _IN_OPT_ uint8_t channel)
 {
+    int ret = -1;
     char buf[256];
     uint64_t cur, time = HAL_UptimeMs();
 
     snprintf(buf, sizeof(buf), "sudo ifconfig %s up", awss_dev_name);
     awss_system(buf);
 
-    snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s", ssid, passwd);
+    if (HAL_Sys_Net_Is_Ready()) {
+        uint8_t cur_bssid[ETH_ALEN] = {0};
+        char cur_ssid[HAL_MAX_SSID_LEN] = {0};
+
+        HAL_Wifi_Get_Ap_Info(cur_ssid, NULL, cur_bssid);
+        if (strcmp(ssid, cur_ssid) == 0 &&
+            (!bssid || memcmp(bssid, cur_bssid, ETH_ALEN) == 0))
+            return 0;
+
+        snprintf(buf, sizeof(buf), "sudo nmcli dev dis %s", awss_dev_name);
+        awss_system(buf);
+        usleep(100 * 1000);
+    }
+
+    if (bssid && !AWSS_IS_INVALID_MAC(bssid)) {
+        snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s bssid " AWSS_MAC_STR, ssid, passwd, AWSS_MAC2STR(bssid));
+    } else {  // no specific bssid
+        snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s", ssid, passwd);
+    }
 
     cur = HAL_UptimeMs();
     if (cur - time > connection_timeout_ms)
@@ -474,7 +529,44 @@ int HAL_Awss_Connect_Ap(
         awss_system(buf);
         usleep(1000 * 1000);
     }
-    return HAL_Sys_Net_Is_Ready() ? 0 : -1;
+
+    ret = HAL_Sys_Net_Is_Ready() ? 0 : -1;
+
+    do {
+        int len;
+        const char *aha = "aha";
+        const char *adha = "adha";
+        struct awss_ap_record_t ap_record;
+        if (ret != 0)
+            break;
+        // HAL_MAX_SSID_LEN = 32 + 1
+        // HAL_MX_PASSWD_LEN = 64 + 1
+        ssid[HAL_MAX_SSID_LEN - 1] = '\0';
+        passwd[HAL_MAX_PASSWD_LEN - 1] = '\0';
+
+        // filter aha & adha
+        if (strlen(ssid) == strlen(aha) && strcmp(ssid, aha) == 0)
+            break;
+        if (strlen(ssid) != strlen(adha) && strcmp(ssid, adha) == 0)
+            break;
+
+        memset(&ap_record, 0, sizeof(ap_record));
+        strncpy(ap_record.ssid, ssid, HAL_MAX_SSID_LEN);
+        strncpy(ap_record.passwd, passwd, HAL_MAX_PASSWD_LEN);
+        memcpy(ap_record.bssid, bssid, ETH_ALEN);
+        printf("write flash bssid:" AWSS_MAC_STR "\n", AWSS_MAC2STR(ap_record.bssid));
+
+        if (HAL_Kv_Set(AWSS_AP_RECORD_KEY, &ap_record, sizeof(ap_record), 0) != 0)
+            break;
+
+        memset(&ap_record, 0, sizeof(ap_record));
+        len = sizeof(ap_record);
+        if (HAL_Kv_Get(AWSS_AP_RECORD_KEY, &ap_record, &len) != 0)
+            break;
+        printf("read flash bssid:" AWSS_MAC_STR "\n", AWSS_MAC2STR(ap_record.bssid));
+    } while (0);
+
+    return ret;
 }
 
 /**
@@ -597,8 +689,10 @@ int HAL_Wifi_Get_Ap_Info(
             _OU_ char passwd[HAL_MAX_PASSWD_LEN],
             _OU_ uint8_t bssid[ETH_ALEN])
 {
+    int len;
     int ret = -1;
     struct iwreq wrq;
+    struct awss_ap_record_t ap_record;
     char ssid_buf[HAL_MAX_SSID_LEN + 1] = {0};
 
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -607,19 +701,35 @@ int HAL_Wifi_Get_Ap_Info(
 
     strncpy(wrq.ifr_name, awss_dev_name, IFNAMSIZ);
 
-    if (ioctl(sock, SIOCGIWAP, &wrq) < 0)
-        goto GET_AP_INFO_ERR;
-    if (bssid)
+    if (bssid) {
+        if (ioctl(sock, SIOCGIWAP, &wrq) < 0)
+            goto GET_AP_INFO_ERR;
         memcpy(bssid, wrq.u.ap_addr.sa_data, ETH_ALEN);
+    }
 
-    wrq.u.essid.pointer = (caddr_t)ssid_buf;
-    wrq.u.essid.length = HAL_MAX_SSID_LEN + 1;
-    wrq.u.essid.flags = 0;
-    if (ioctl(sock, SIOCGIWESSID, &wrq) < 0)
-        goto GET_AP_INFO_ERR;
+    if (ssid) {
+        wrq.u.essid.pointer = (caddr_t)ssid_buf;
+        wrq.u.essid.length = HAL_MAX_SSID_LEN + 1;
+        wrq.u.essid.flags = 0;
 
-    if (ssid)
+        if (ioctl(sock, SIOCGIWESSID, &wrq) < 0)
+            goto GET_AP_INFO_ERR;
+
         strncpy(ssid, ssid_buf, HAL_MAX_SSID_LEN);
+    }
+
+    if (passwd) {
+        memset(&ap_record, 0, sizeof(ap_record));
+        len = sizeof(ap_record);
+        if (HAL_Kv_Get(AWSS_AP_RECORD_KEY, &ap_record, &len) != 0)
+            goto GET_AP_INFO_ERR;
+        if (ssid && strcmp(ssid, ap_record.ssid) != 0)
+            goto GET_AP_INFO_ERR;
+        if (bssid && memcmp(bssid, ap_record.bssid, ETH_ALEN) != 0)
+            goto GET_AP_INFO_ERR;
+        strncpy(passwd, ap_record.passwd, HAL_MAX_PASSWD_LEN);
+    }
+
     ret = 0;
 
 GET_AP_INFO_ERR:

@@ -566,8 +566,11 @@ int linkkit_main(void *paras)
     memcpy(master_meta_info.device_secret, DEVICE_SECRET, strlen(DEVICE_SECRET));
 
 #if defined(WIFI_PROVISION_ENABLED)
-    awss_config_press();
-    awss_start();
+    extern int awss_connect_last_ap();
+    if (awss_connect_last_ap() != 0) {
+        awss_config_press();
+        awss_start();
+    }
 #endif
     /* Choose Login Server, domain should be configured before IOT_Linkkit_Open() */
 #if USE_CUSTOME_DOMAIN
