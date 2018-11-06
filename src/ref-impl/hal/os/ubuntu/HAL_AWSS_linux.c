@@ -554,7 +554,6 @@ int HAL_Awss_Connect_Ap(
         strncpy(ap_record.ssid, ssid, HAL_MAX_SSID_LEN);
         strncpy(ap_record.passwd, passwd, HAL_MAX_PASSWD_LEN);
         memcpy(ap_record.bssid, bssid, ETH_ALEN);
-        printf("write flash bssid:" AWSS_MAC_STR "\n", AWSS_MAC2STR(ap_record.bssid));
 
         if (HAL_Kv_Set(AWSS_AP_RECORD_KEY, &ap_record, sizeof(ap_record), 0) != 0)
             break;
@@ -563,7 +562,6 @@ int HAL_Awss_Connect_Ap(
         len = sizeof(ap_record);
         if (HAL_Kv_Get(AWSS_AP_RECORD_KEY, &ap_record, &len) != 0)
             break;
-        printf("read flash bssid:" AWSS_MAC_STR "\n", AWSS_MAC2STR(ap_record.bssid));
     } while (0);
 
     return ret;
