@@ -336,6 +336,7 @@ void *awss_monitor_thread_func(void *arg)
 
     return NULL;
 }
+
 /**
  * @brief   设置Wi-Fi网卡工作在监听(Monitor)模式, 并在收到802.11帧的时候调用被传入的回调函数
  *
@@ -347,7 +348,14 @@ void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
     int ret;
 
     ret = awss_get_dev_name();
-    if (ret) {
+    if (strcmp(awss_dev_name, AWSS_MONITOR_DEV_NAME) == 0) {  // the last time is ended with exception
+        // clear context of the last time
+        snprintf(buf, sizeof(buf), "sudo iw dev %s del", awss_dev_name);
+        awss_system(buf);
+        ret = -1;
+    }
+
+    if (ret) {  // set default wlan0 for new operation
         strncpy(awss_dev_name, "wlan0", sizeof(awss_dev_name));
         snprintf(buf, sizeof(buf), "sudo iw phy phy0 interface add %s type managed", awss_dev_name);
         awss_system(buf);
