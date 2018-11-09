@@ -19,6 +19,7 @@
 #include <linux/if_packet.h>
 
 #include "iot_import.h"
+#include "awss_80211.h"
 
 #define AWSS_IS_INVALID_MAC(mac) (((char *)(mac))[0] == 0 && ((char *)(mac))[1] == 0 && ((char *)(mac))[2] == 0 && \
                                   ((char *)(mac))[3] == 0 && ((char *)(mac))[4] == 0 && ((char *)(mac))[5] == 0)
@@ -332,7 +333,6 @@ void *awss_monitor_thread_func(void *arg)
         /* link-type IEEE802_11_RADIO (802.11 plus radiotap header) */
         int link_type = AWSS_LINK_TYPE_80211_RADIO;
 
-        extern int awss_parse_ieee802_11_radio_header(const char *, int, int8_t *);
         awss_parse_ieee802_11_radio_header(ether_frame, len, &rssi);
 
         (*ieee80211_handler)(ether_frame, len, link_type, with_fcs, rssi);
@@ -352,7 +352,7 @@ void *awss_monitor_thread_func(void *arg)
 void HAL_Awss_Open_Monitor(_IN_ awss_recv_80211_frame_cb_t cb)
 {
     char buf[256];
-    int ret;
+    int ret = 0;
 
     ret = awss_get_dev_name();
     if (strcmp(awss_dev_name, AWSS_MONITOR_DEV_NAME) == 0) {  // the last time is ended with exception

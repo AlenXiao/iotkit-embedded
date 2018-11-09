@@ -21,11 +21,11 @@
 
 #include <string.h>
 
-#include "netdissect.h"
+#include "awss_netdissect.h"
 
-#include "extract.h"
+#include "awss_extract.h"
 
-#include "cpack.h"
+#include "awss_cpack.h"
 
 /*
  * The radio capture header precedes the 802.11 header.
@@ -110,7 +110,7 @@ trunc:
 }
 
 
-static int8_t print_in_radiotap_namespace(struct cpack_state *s, uint8_t *flags,
+static int8_t awss_parse_radiotap_namespace(struct cpack_state *s, uint8_t *flags,
                                        uint32_t presentflags, int bit0)
 {
 #define    BITNO_32(x) (((x) >> 16) ? 16 + BITNO_16((x) >> 16) : BITNO_16((x)))
@@ -238,7 +238,7 @@ int awss_parse_ieee802_11_radio_header(const char *p, int caplen, int8_t *rssi)
              */
             skip_length = 0;
         } else {
-            int8_t rssi_dbm = print_in_radiotap_namespace(&cpacker, &flags, presentflags, bit0);
+            int8_t rssi_dbm = awss_parse_radiotap_namespace(&cpacker, &flags, presentflags, bit0);
             if (rssi_dbm < -1) {
                 /*
                  * Fatal error - can't process anything

@@ -107,28 +107,12 @@ typedef unsigned char nd_byte;
  * Round up x to a multiple of y; y must be a power of 2.
  */
 #ifndef roundup2
-#define    roundup2(x, y)    (((x)+((y)-1))&(~((y)-1)))
+#define roundup2(x, y)    (((x)+((y)-1))&(~((y)-1)))
 #endif
 
 /* nd_snprintf et al */
 
 #include <stdarg.h>
-//#include <pcap.h>
-
-#ifndef HAVE_STRLCAT
-extern size_t strlcat (char *, const char *, size_t);
-#endif
-#ifndef HAVE_STRLCPY
-extern size_t strlcpy (char *, const char *, size_t);
-#endif
-
-#ifndef HAVE_STRDUP
-extern char *strdup (const char *str);
-#endif
-
-#ifndef HAVE_STRSEP
-extern char *strsep(char **, const char *);
-#endif
 
 #ifndef min
 #define min(a,b) ((a)>(b)?(b):(a))

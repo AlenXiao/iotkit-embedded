@@ -34,13 +34,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "netdissect.h"
-#include "extract.h"
+#include "awss_netdissect.h"
+#include "awss_extract.h"
 
-#include "cpack.h"
+#include "awss_cpack.h"
 
-const uint8_t *
-cpack_next_boundary(const uint8_t *buf, const uint8_t *p, size_t alignment)
+const uint8_t *cpack_next_boundary(const uint8_t *buf, const uint8_t *p, size_t alignment)
 {
 	size_t misalignment = (size_t)(p - buf) % alignment;
 
@@ -54,8 +53,7 @@ cpack_next_boundary(const uint8_t *buf, const uint8_t *p, size_t alignment)
  * wordsize bytes remain in the buffer after the boundary.  Otherwise,
  * return a pointer to the boundary.
  */
-const uint8_t *
-cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize)
+const uint8_t *cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize)
 {
 	const uint8_t *next;
 
@@ -70,8 +68,7 @@ cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize)
 }
 
 /* Advance by N bytes without returning them. */
-int
-cpack_advance(struct cpack_state *cs, const size_t toskip)
+int cpack_advance(struct cpack_state *cs, const size_t toskip)
 {
 	/* No space left? */
 	if (cs->c_next - cs->c_buf + toskip > cs->c_len)
@@ -80,8 +77,7 @@ cpack_advance(struct cpack_state *cs, const size_t toskip)
 	return 0;
 }
 
-int
-cpack_init(struct cpack_state *cs, const uint8_t *buf, size_t buflen)
+int cpack_init(struct cpack_state *cs, const uint8_t *buf, size_t buflen)
 {
 	memset(cs, 0, sizeof(*cs));
 
@@ -93,8 +89,7 @@ cpack_init(struct cpack_state *cs, const uint8_t *buf, size_t buflen)
 }
 
 /* Unpack a 64-bit unsigned integer. */
-int
-cpack_uint64(struct cpack_state *cs, uint64_t *u)
+int cpack_uint64(struct cpack_state *cs, uint64_t *u)
 {
 	const uint8_t *next;
 
@@ -109,8 +104,7 @@ cpack_uint64(struct cpack_state *cs, uint64_t *u)
 }
 
 /* Unpack a 64-bit signed integer. */
-int
-cpack_int64(struct cpack_state *cs, int64_t *u)
+int cpack_int64(struct cpack_state *cs, int64_t *u)
 {
 	const uint8_t *next;
 
@@ -125,8 +119,7 @@ cpack_int64(struct cpack_state *cs, int64_t *u)
 }
 
 /* Unpack a 32-bit unsigned integer. */
-int
-cpack_uint32(struct cpack_state *cs, uint32_t *u)
+int cpack_uint32(struct cpack_state *cs, uint32_t *u)
 {
 	const uint8_t *next;
 
@@ -141,8 +134,7 @@ cpack_uint32(struct cpack_state *cs, uint32_t *u)
 }
 
 /* Unpack a 32-bit signed integer. */
-int
-cpack_int32(struct cpack_state *cs, int32_t *u)
+int cpack_int32(struct cpack_state *cs, int32_t *u)
 {
 	const uint8_t *next;
 
@@ -157,8 +149,7 @@ cpack_int32(struct cpack_state *cs, int32_t *u)
 }
 
 /* Unpack a 16-bit unsigned integer. */
-int
-cpack_uint16(struct cpack_state *cs, uint16_t *u)
+int cpack_uint16(struct cpack_state *cs, uint16_t *u)
 {
 	const uint8_t *next;
 
@@ -173,8 +164,7 @@ cpack_uint16(struct cpack_state *cs, uint16_t *u)
 }
 
 /* Unpack a 16-bit signed integer. */
-int
-cpack_int16(struct cpack_state *cs, int16_t *u)
+int cpack_int16(struct cpack_state *cs, int16_t *u)
 {
 	const uint8_t *next;
 
@@ -189,8 +179,7 @@ cpack_int16(struct cpack_state *cs, int16_t *u)
 }
 
 /* Unpack an 8-bit unsigned integer. */
-int
-cpack_uint8(struct cpack_state *cs, uint8_t *u)
+int cpack_uint8(struct cpack_state *cs, uint8_t *u)
 {
 	/* No space left? */
 	if ((size_t)(cs->c_next - cs->c_buf) >= cs->c_len)
@@ -204,8 +193,7 @@ cpack_uint8(struct cpack_state *cs, uint8_t *u)
 }
 
 /* Unpack an 8-bit signed integer. */
-int
-cpack_int8(struct cpack_state *cs, int8_t *u)
+int cpack_int8(struct cpack_state *cs, int8_t *u)
 {
 	/* No space left? */
 	if ((size_t)(cs->c_next - cs->c_buf) >= cs->c_len)

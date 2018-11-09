@@ -27,17 +27,16 @@
  * OF SUCH DAMAGE.
  */
 
-#ifndef _CPACK_H
-#define _CPACK_H
+#ifndef __AWSS_CPACK_H__
+#define __AWSS_CPACK_H__
 
 struct cpack_state {
-	const uint8_t					*c_buf;
-	const uint8_t					*c_next;
-	size_t						 c_len;
+    const uint8_t *c_buf;
+    const uint8_t *c_next;
+    size_t c_len;
 };
 
 int cpack_init(struct cpack_state *, const uint8_t *, size_t);
-
 int cpack_uint8(struct cpack_state *, uint8_t *);
 int cpack_int8(struct cpack_state *, int8_t *);
 int cpack_uint16(struct cpack_state *, uint16_t *);
