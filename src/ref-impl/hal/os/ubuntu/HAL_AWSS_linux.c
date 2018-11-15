@@ -20,7 +20,7 @@
 
 #include "iot_import.h"
 #include "awss_80211.h"
-#include "awss_scan.h"
+#include "iw.h"
 
 #define AWSS_IS_INVALID_MAC(mac) (((char *)(mac))[0] == 0 && ((char *)(mac))[1] == 0 && ((char *)(mac))[2] == 0 && \
                                   ((char *)(mac))[3] == 0 && ((char *)(mac))[4] == 0 && ((char *)(mac))[5] == 0)

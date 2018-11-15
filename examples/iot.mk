@@ -14,6 +14,9 @@ ifneq (,$(filter -D_PLATFORM_IS_WINDOWS_,$(CFLAGS)))
 LDFLAGS             += -lws2_32
 CFLAGS              := $(filter-out -DCOAP_COMM_ENABLED,$(CFLAGS))
 endif
+ifneq (,$(filter -D_PLATFORM_IS_LINUX_,$(CFLAGS)))
+LDFLAGS             += -lnl
+endif
 
 ifneq (,$(filter -DMQTT_COMM_ENABLED,$(CFLAGS)))
 TARGET                          += mqtt-example mqtt-example-rrpc mqtt-example-multithread
