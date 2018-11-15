@@ -483,24 +483,6 @@ int awss_connect_last_ap()
  *      If the STA connects the old AP, HAL should disconnect from the old AP firstly.
  *      If bssid specifies the dest AP, HAL should use bssid to connect dest AP.
  */
-int awss_wifi_test(
-            const char ssid[HAL_MAX_SSID_LEN],
-            const uint8_t bssid[ETH_ALEN],
-            enum AWSS_AUTH_TYPE auth,
-            enum AWSS_ENC_TYPE encry,
-            uint8_t channel, signed char rssi,
-            int is_last_ap)
-{
-    printf("ssid:%s, bssid:" AWSS_MAC_STR ", rssi:%d, channel:%d, last:%d\n", ssid, AWSS_MAC2STR(bssid), rssi, channel, is_last_ap);
-    return 0;
-}
-
-int awss_scan_test()
-{
-    awss_scan(awss_dev_name, awss_wifi_test);
-    return 0;
-}
-
 int HAL_Awss_Connect_Ap(
             _IN_ uint32_t connection_timeout_ms,
             _IN_ char ssid[HAL_MAX_SSID_LEN],

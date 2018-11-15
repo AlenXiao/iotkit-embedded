@@ -491,51 +491,6 @@ int HAL_Firmware_Persistence_Stop(void)
     return 0;
 }
 
-int HAL_Config_Write(const char *buffer, int length)
-{
-    FILE *fp;
-    size_t written_len;
-    char filepath[128] = {0};
-
-    if (!buffer || length <= 0) {
-        return -1;
-    }
-
-    snprintf(filepath, sizeof(filepath), "./%s", "alinkconf");
-    fp = fopen(filepath, "w");
-    if (!fp) {
-        return -1;
-    }
-
-    written_len = fwrite(buffer, 1, length, fp);
-
-    fclose(fp);
-
-    return ((written_len != length) ? -1 : 0);
-}
-
-int HAL_Config_Read(char *buffer, int length)
-{
-    FILE *fp;
-    size_t read_len;
-    char filepath[128] = {0};
-
-    if (!buffer || length <= 0) {
-        return -1;
-    }
-
-    snprintf(filepath, sizeof(filepath), "./%s", "alinkconf");
-    fp = fopen(filepath, "r");
-    if (!fp) {
-        return -1;
-    }
-
-    read_len = fread(buffer, 1, length, fp);
-    fclose(fp);
-
-    return ((read_len != length) ? -1 : 0);
-}
-
 #define REBOOT_CMD "reboot"
 void HAL_Reboot(void)
 {
