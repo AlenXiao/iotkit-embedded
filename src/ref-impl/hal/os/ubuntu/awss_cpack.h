@@ -30,6 +30,11 @@
 #ifndef __AWSS_CPACK_H__
 #define __AWSS_CPACK_H__
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 struct cpack_state {
     const uint8_t *c_buf;
     const uint8_t *c_next;
@@ -51,4 +56,7 @@ const uint8_t *cpack_align_and_reserve(struct cpack_state *cs, size_t wordsize);
 
 extern int cpack_advance(struct cpack_state *, const size_t);
 
+#ifdef __cplusplus
+}
+#endif
 #endif /* _CPACK_H */

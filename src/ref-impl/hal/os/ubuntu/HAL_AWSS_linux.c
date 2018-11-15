@@ -20,6 +20,7 @@
 
 #include "iot_import.h"
 #include "awss_80211.h"
+#include "awss_scan.h"
 
 #define AWSS_IS_INVALID_MAC(mac) (((char *)(mac))[0] == 0 && ((char *)(mac))[1] == 0 && ((char *)(mac))[2] == 0 && \
                                   ((char *)(mac))[3] == 0 && ((char *)(mac))[4] == 0 && ((char *)(mac))[5] == 0)
@@ -47,6 +48,7 @@ static void awss_system(const char *buf)
         return;
     if (system(buf))
         printf("cmd %s fail\n", buf);
+    printf("cmd %s\n", buf);
 }
 
 /*
@@ -481,6 +483,24 @@ int awss_connect_last_ap()
  *      If the STA connects the old AP, HAL should disconnect from the old AP firstly.
  *      If bssid specifies the dest AP, HAL should use bssid to connect dest AP.
  */
+int awss_wifi_test(
+            const char ssid[HAL_MAX_SSID_LEN],
+            const uint8_t bssid[ETH_ALEN],
+            enum AWSS_AUTH_TYPE auth,
+            enum AWSS_ENC_TYPE encry,
+            uint8_t channel, signed char rssi,
+            int is_last_ap)
+{
+    printf("ssid:%s, bssid:" AWSS_MAC_STR ", rssi:%d, channel:%d, last:%d\n", ssid, AWSS_MAC2STR(bssid), rssi, channel, is_last_ap);
+    return 0;
+}
+
+int awss_scan_test()
+{
+    awss_scan(awss_dev_name, awss_wifi_test);
+    return 0;
+}
+
 int HAL_Awss_Connect_Ap(
             _IN_ uint32_t connection_timeout_ms,
             _IN_ char ssid[HAL_MAX_SSID_LEN],
@@ -510,6 +530,10 @@ int HAL_Awss_Connect_Ap(
         awss_system(buf);
         usleep(100 * 1000);
     }
+
+    snprintf(buf, sizeof(buf), "sudo rm /etc/NetworkManager/system-connections/* -rf");
+    awss_system(buf);
+    usleep(100 * 1000);
 
     if (bssid && !AWSS_IS_INVALID_MAC(bssid)) {
         snprintf(buf, sizeof(buf), "sudo nmcli device wifi connect %s password %s bssid " AWSS_MAC_STR, ssid, passwd, AWSS_MAC2STR(bssid));
@@ -664,6 +688,7 @@ int HAL_Wifi_Enable_Mgmt_Frame_Filter(
  */
 int HAL_Wifi_Scan(awss_wifi_scan_result_cb_t cb)
 {
+    awss_scan(awss_dev_name, cb);
     return 0;
 }
 
@@ -682,6 +707,7 @@ int HAL_Wifi_Scan(awss_wifi_scan_result_cb_t cb)
  * @note
  *     If the STA dosen't connect AP successfully, HAL should return -1 and not touch the ssid/passwd/bssid buffer.
  */
+
 int HAL_Wifi_Get_Ap_Info(
             _OU_ char ssid[HAL_MAX_SSID_LEN],
             _OU_ char passwd[HAL_MAX_PASSWD_LEN],
