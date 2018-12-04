@@ -1176,10 +1176,15 @@ int IOT_Linkkit_Close(int devid)
         return FAIL_RETURN;
     }
 
+#ifdef DEVICE_MODEL_ENABLED
+    extern int awss_bind_deinit();
+    awss_bind_deinit();
+#endif
+
     if (devid == IOTX_DM_LOCAL_NODE_DEVID) {
         res = _iotx_linkkit_master_close();
     } else {
-        return FAIL_RETURN;
+        res = FAIL_RETURN;
     }
 
     return res;

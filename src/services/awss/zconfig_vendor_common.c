@@ -90,7 +90,7 @@ uint8_t zconfig_get_lock_chn(void)
     return aws_locked_chn;
 }
 
-void zconfig_force_rescan()
+void zconfig_force_rescan(void)
 {
     if (aws_info) aws_state = AWS_SCANNING;
 }

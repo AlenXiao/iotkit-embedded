@@ -151,8 +151,12 @@ int awss_cmp_coap_ob_send(void *buf, uint32_t len, void *sa, const char *uri, vo
 
 int awss_cmp_coap_deinit()
 {
-    if (g_coap_ctx) CoAPServer_deinit(g_coap_ctx);
+    void *coap_ctx = g_coap_ctx;
     g_coap_ctx = NULL;
+
+    if (coap_ctx)
+        CoAPServer_deinit(coap_ctx);
+
     return 0;
 }
 
@@ -188,14 +192,16 @@ int awss_cmp_local_init()
     return 0;
 }
 
-int awss_cmp_local_deinit()
+int awss_cmp_local_deinit(int force)
 {
     if (g_coap_ctx == NULL)
         return 0;
 #ifdef WIFI_PROVISION_ENABLED
     awss_devinfo_notify_stop();
+    awss_suc_notify_stop();
 #endif
-    //awss_cmp_coap_deinit();
+    if (force)
+        awss_cmp_coap_deinit();
 
     return 0;
 }
