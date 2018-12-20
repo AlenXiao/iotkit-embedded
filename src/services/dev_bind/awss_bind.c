@@ -36,7 +36,6 @@ int awss_report_cloud()
     awss_cmp_local_init();
     awss_dev_bind_notify_stop();
     awss_dev_bind_notify();
-
 #ifdef WIFI_PROVISION_ENABLED
 #ifndef AWSS_DISABLE_REGISTRAR
     extern void awss_registrar_init(void);
@@ -60,7 +59,7 @@ int awss_bind_deinit()
 
     awss_dev_bind_notify_stop();
 
-    awss_cmp_local_deinit(0);
+    awss_cmp_local_deinit(1);
 #ifdef WIFI_PROVISION_ENABLED
 #ifndef AWSS_DISABLE_REGISTRAR
     extern void awss_registrar_deinit(void);

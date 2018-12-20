@@ -463,6 +463,16 @@ int awss_connect_last_ap()
     return ret;
 }
 
+int HAL_Awss_Open_Ap(const char *ssid, const char *passwd, int beacon_interval, int hide)
+{
+    return 0;
+}
+
+int HAL_Awss_Close_Ap(void)
+{
+    return 0;
+}
+
 /**
  * @brief   要求Wi-Fi网卡连接指定热点(Access Point)的函数
  *

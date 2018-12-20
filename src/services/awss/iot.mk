@@ -8,6 +8,7 @@ HDR_REFS        += src/sdk-impl
 
 ifneq (,$(filter -DWIFI_PROVISION_ENABLED,$(CFLAGS)))
     CFLAGS      += -DAWSS_SUPPORT_APLIST
+    CFLAGS      += -DAWSS_SUPPORT_DEV_AP
 
     ifneq (,$(filter -DAWSS_SUPPORT_SMARTCONFIG,$(CFLAGS)))
         CFLAGS  += -DAWSS_SUPPORT_SMARTCONFIG \

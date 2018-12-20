@@ -44,9 +44,9 @@ int awss_start(void)
 {
     awss_event_post(AWSS_START);
     produce_random(aes_random, sizeof(aes_random));
+    awss_stopped = 0;
 
     do {
-        awss_stopped = 0;
         __awss_start();
 #if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
         do {
@@ -63,8 +63,11 @@ int awss_start(void)
                     awss_cmp_local_init();
 
                     awss_open_adha_monitor();
-                    while (!awss_is_ready_switch_next_adha())
+                    while (!awss_is_ready_switch_next_adha()) {
+                        if (awss_stopped)
+                            break;
                         os_msleep(50);
+                    }
                     awss_cmp_local_deinit(0);
                 }
 
@@ -79,6 +82,7 @@ int awss_start(void)
             if (switch_ap_done)
                 break;
 
+            os_wifi_get_ap_info(ssid , NULL, NULL);
             if (strlen(ssid) > 0 && strcmp(ssid, DEFAULT_SSID))  // not AHA
                 break;
 
@@ -95,6 +99,8 @@ int awss_start(void)
                         dest_ap = 1;
                         break;
                     }
+                    if (awss_stopped)
+                        break;
                     os_msleep(50);
                 }
 
@@ -117,6 +123,9 @@ int awss_start(void)
             break;
     } while (1);
 
+    if (awss_stopped)
+        return -1;
+
 #ifdef AWSS_SUPPORT_AHA
     awss_close_aha_monitor();
 #endif
@@ -131,6 +140,7 @@ int awss_start(void)
 
 int awss_stop(void)
 {
+    awss_stopped = 1;
 #ifdef AWSS_SUPPORT_AHA
     awss_close_aha_monitor();
 #endif
@@ -139,7 +149,7 @@ int awss_stop(void)
 #endif
     __awss_stop();
     awss_cmp_local_deinit(0);
-    awss_stopped = 1;
+
     return 0;
 }
 
@@ -172,8 +182,6 @@ int awss_config_press(void)
     if (timeout < AWSS_PRESS_TIMEOUT_MS)
         timeout = AWSS_PRESS_TIMEOUT_MS;
     HAL_Timer_Start(press_timer, timeout);
-
-    awss_debug("%s exit", __func__);
 
     return 0;
 }

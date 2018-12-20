@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
+#include <unistd.h>
 #ifdef DEPRECATED_LINKKIT
 #include "deprecated/solo.c"
 #else
@@ -522,6 +523,51 @@ void set_iotx_info()
     HAL_SetDeviceSecret(DEVICE_SECRET);
 }
 
+static void *awss_start_thread = NULL;
+static void *awss_stop_thread = NULL;
+static int awss_test = 0;
+
+static void *awss_start_test(void *param)
+{
+    void *start_thread = awss_start_thread;
+
+    extern int awss_connect_last_ap();
+    extern int awss_dev_ap_start();
+    printf("start dev ap\n");
+    awss_dev_ap_start();
+    printf("start awss\n");
+    //if (awss_connect_last_ap() != 0) {
+        awss_config_press();
+        awss_start();
+    //}
+    awss_start_thread = NULL;
+    printf("%s exit\n", __func__);
+    awss_test ++;
+    HAL_ThreadDelete(start_thread);
+    return NULL;
+}
+
+static void *awss_stop_test(void *param)
+{
+    void *stop_thread = awss_stop_thread;
+
+    printf("%s\n", __func__);
+    sleep(10);
+    printf("stop dev ap\n");
+    extern int awss_dev_ap_stop();
+    awss_dev_ap_stop();
+
+    sleep(10);
+    printf("stop awss\n");
+    awss_stop();
+
+    awss_stop_thread = NULL;
+    printf("%s exit\n", __func__);
+    awss_test ++;
+    HAL_ThreadDelete(stop_thread);
+    return NULL;
+}
+
 int linkkit_main(void *paras)
 {
 
@@ -566,11 +612,13 @@ int linkkit_main(void *paras)
     memcpy(master_meta_info.device_secret, DEVICE_SECRET, strlen(DEVICE_SECRET));
 
 #if defined(WIFI_PROVISION_ENABLED)
-    extern int awss_connect_last_ap();
-    if (awss_connect_last_ap() != 0) {
-        awss_config_press();
-        awss_start();
+    HAL_ThreadCreate(&awss_start_thread, awss_start_test, NULL, NULL, 0);
+    HAL_ThreadCreate(&awss_stop_thread, awss_stop_test, NULL, NULL, 0);
+    while (awss_test < 2) {
+        printf("wait for finish\n");
+        sleep(1);
     }
+    return 0;
 #endif
     /* Choose Login Server, domain should be configured before IOT_Linkkit_Open() */
 #if USE_CUSTOME_DOMAIN

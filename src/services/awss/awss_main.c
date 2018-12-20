@@ -35,7 +35,6 @@ int __awss_start(void)
     uint8_t channel = 0;
     int ret;
 
-    awss_trace("%s\n", __func__);
     awss_stop_connecting = 0;
     awss_finished = 0;
     /* these params is useless, keep it for compatible reason */
@@ -46,6 +45,11 @@ int __awss_start(void)
     if (!ret)
 	    awss_warn("awss timeout!");
 
+    if (awss_stop_connecting) {
+        awss_finished = 1;
+        return -1;
+    }
+
     aws_destroy();
 
     do {
@@ -54,8 +58,9 @@ int __awss_start(void)
         int adha = 0;
 #endif
 
-        if (awss_stop_connecting)
+        if (awss_stop_connecting || strlen(ssid) == 0) {
             break;
+        }
 #if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
         if ((adha = strcmp(ssid, ADHA_SSID)) == 0 || strcmp(ssid, DEFAULT_SSID) == 0) {
             awss_notify_needed = 0;
@@ -107,7 +112,6 @@ int __awss_stop(void)
 {
     awss_stop_connecting = 1;
     aws_destroy();
-    awss_dev_bind_notify_stop();
 #if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
     awss_devinfo_notify_stop();
 #endif
@@ -120,6 +124,7 @@ int __awss_stop(void)
         if (awss_finished) break;
         os_msleep(300);
     }
+    aws_release_mutex();
     return 0;
 }
 

@@ -185,13 +185,13 @@ void CoAPServer_deinit(CoAPContext *context)
         HAL_MutexDestroy(coap_yield_mutex);
         coap_yield_mutex = NULL;
     }
-    HAL_ThreadDelete(g_coap_thread);
+    //HAL_ThreadDelete(g_coap_thread);
 #endif
     if (NULL != context) {
         CoAPContext_free(context);
         g_context = NULL;
     }
-    HAL_SleepMs(1000);
+    //HAL_SleepMs(1000);
 }
 
 int CoAPServer_register(CoAPContext *context, const char *uri, CoAPRecvMsgHandler callback)

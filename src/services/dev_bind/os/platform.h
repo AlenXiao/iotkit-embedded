@@ -418,6 +418,9 @@ typedef awss_recv_80211_frame_cb_t platform_awss_recv_80211_frame_cb_t;
  */
 #define platform_awss_connect_ap HAL_Awss_Connect_Ap
 
+#define platform_awss_open_ap HAL_Awss_Open_Ap
+#define platform_awss_close_ap HAL_Awss_Close_Ap
+
 /* 80211 frame type */
 #define platform_awss_frame_type HAL_Awss_Frame_Type
 

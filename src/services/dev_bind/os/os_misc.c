@@ -244,8 +244,8 @@ char *os_wifi_get_mac_str(char mac_str[OS_MAC_LEN])
     while (str) {
         str = strchr(str, ':');
         if (str) {
-            colon_num++;
-            str++; /* eating char ':' */
+            colon_num ++;
+            str ++; /* eating char ':' */
         }
     }
 

@@ -11,7 +11,7 @@
 #define DEV_SIGN_SIZE                  (SHA1_DIGEST_SIZE)
 
 #define ILOP_VER                       "1.0"
-#define AWSS_VER                       "{\"smartconfig\":\"2.0\",\"zconfig\":\"2.0\",\"router\":\"2.0\",\"ap\":\"2.0\"}"
+#define AWSS_VER                       "{\"smartconfig\":\"2.0\",\"zconfig\":\"2.0\",\"router\":\"2.0\",\"ap\":\"2.0\",\"softap\":\"2.0\"}"
 
 #define TOPIC_AWSS_WIFILIST             "/sys/%s/%s/awss/event/wifilist/get"
 #define TOPIC_AWSS_SWITCHAP             "/sys/%s/%s/awss/device/switchap"
@@ -32,18 +32,20 @@
 #define TOPIC_ZC_CIPHER_REPLY           "/sys/%s/%s/thing/cipher/get_reply"
 #define TOPIC_MATCH_REPORT              "/sys/%s/%s/thing/awss/enrollee/match"
 #define TOPIC_MATCH_REPORT_REPLY        "/sys/%s/%s/thing/awss/enrollee/match_reply"
+#define TOPIC_AWSS_DEV_AP_SWITCHAP      "/sys/awss/device/softap/switchap"
 
 #define METHOD_DEV_INFO_NOTIFY          "device.info.notify"
 #define METHOD_AWSS_DEV_INFO_NOTIFY     "awss.device.info.notify"
 #define METHOD_AWSS_CONNECTAP_NOTIFY    "awss.event.connectap.notify"
+#define METHOD_AWSS_DEV_AP_SWITCHAP     "awss.device.softap.switchap"
 #define METHOD_EVENT_ZC_SWITCHAP        "thing.awss.device.switchap"
 #define METHOD_EVENT_ZC_ENROLLEE        "thing.awss.enrollee.found"
 #define METHOD_EVENT_ZC_CHECKIN         "thing.awss.enrollee.checkin"
 #define METHOD_EVENT_ZC_CIPHER          "thing.cipher.get"
 #define METHOD_MATCH_REPORT             "thing.awss.enrollee.match"
 
-#define AWSS_ACK_FMT                    "{\"id\":%s, \"code\":%d, \"data\":%s}"
-#define AWSS_REQ_FMT                    "{\"id\":%s, \"version\":\"%s\", \"method\":\"%s\", \"params\":%s}"
+#define AWSS_ACK_FMT                    "{\"id\":%s,\"code\":%d,\"data\":%s}"
+#define AWSS_REQ_FMT                    "{\"id\":%s,\"version\":\"%s\",\"method\":\"%s\",\"params\":%s}"
 #define AWSS_JSON_PARAM                 "params"
 #define AWSS_JSON_CODE                  "code"
 #define AWSS_JSON_ID                    "id"

@@ -17,6 +17,9 @@
 #include "awss_packet.h"
 #ifdef WIFI_PROVISION_ENABLED
 #include "awss_wifimgr.h"
+#ifdef AWSS_SUPPORT_DEV_AP
+#include "awss_dev_ap.h"
+#endif
 #endif
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
@@ -168,6 +171,9 @@ const struct awss_cmp_couple awss_local_couple[] = {
     {TOPIC_AWSS_GETDEVICEINFO_MCAST, wifimgr_process_mcast_get_device_info},
     {TOPIC_AWSS_GETDEVICEINFO_UCAST, wifimgr_process_ucast_get_device_info},
 #endif
+#ifdef AWSS_SUPPORT_DEV_AP
+    {TOPIC_AWSS_DEV_AP_SWITCHAP,     wifimgr_process_dev_ap_switchap_request},
+#endif
 #ifndef AWSS_DISABLE_REGISTRAR
     {TOPIC_NOTIFY,                   online_dev_bind_monitor},
 #endif
@@ -197,7 +203,9 @@ int awss_cmp_local_deinit(int force)
     if (g_coap_ctx == NULL)
         return 0;
 #ifdef WIFI_PROVISION_ENABLED
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
     awss_devinfo_notify_stop();
+#endif
     awss_suc_notify_stop();
 #endif
     if (force)
