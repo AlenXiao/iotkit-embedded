@@ -56,6 +56,8 @@ $(call CompLib_Map, FEATURE_SAL_ENABLED, \
 $(call Conflict_Relation, FEATURE_SUPPORT_TLS, FEATURE_SUPPORT_ITLS)
 $(call Conflict_Relation, FEATURE_MAL_ENABLED, FEATURE_MQTT_COMM_ENABLED)
 $(call Conflict_Relation, FEATURE_MAL_ENABLED, FEATURE_SAL_ENABLED)
+$(call Conflict_Relation, FEATURE_DEVICE_MODEL_RAWDATA_SOLO, FEATURE_DEPRECATED_LINKKIT)
+$(call Conflict_Relation, FEATURE_DEVICE_MODEL_RAWDATA_SOLO, FEATURE_DEVICE_MODEL_GATEWAY)
 
 # 'Opt1 = n' and 'Opt2 = n' conflicts with each other
 #
@@ -64,9 +66,12 @@ $(call Present1_Relation, FEATURE_MQTT_DIRECT, FEATURE_SUPPORT_TLS)
 
 # 'Opt1 = y' requires 'Opt2 = y' as mandantory support
 #
+$(call Requires_Relation, FEATURE_MQTT_LOGPOST, FEATURE_MQTT_COMM_ENABLED)
 $(call Requires_Relation, FEATURE_MQTT_SHADOW, FEATURE_MQTT_COMM_ENABLED)
 $(call Requires_Relation, FEATURE_DEVICE_MODEL_GATEWAY, FEATURE_DEVICE_MODEL_ENABLED)
 $(call Requires_Relation, FEATURE_HTTP2_COMM_ENABLED, FEATURE_SUPPORT_TLS)
+$(call Requires_Relation, FEATURE_OTA_ENABLED, FEATURE_MQTT_COMM_ENABLED)
+$(call Requires_Relation, FEATURE_DEV_BIND_ENABLED, FEATURE_MQTT_COMM_ENABLED)
 $(call Requires_Relation, FEATURE_WIFI_PROVISION_ENABLED, FEATURE_DEV_BIND_ENABLED)
 
 include $(RULE_DIR)/rules.mk

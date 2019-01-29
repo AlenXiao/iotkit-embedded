@@ -70,8 +70,8 @@ one:
 	@$(foreach V,$(INFO_ENV_VARS),$(V)="$($(V))") CFLAGS=$(CFLAGS) \
 	    ALL_LIBS="$(strip $(foreach V,$(SUBDIRS),$(LIBA_TARGET_$(V))))" \
 	    ALL_PROG="$(strip $(foreach V,$(SUBDIRS),$(TARGET_$(V))))" \
-	    COMP_LIB_OBJS="$(foreach V,$(COMP_LIB_OBJS),$(OUTPUT_DIR)/$(V))" \
-	    bash $(RULE_DIR)/scripts/gen_one_makefile.sh $(STAMP_ONE_MK)
+	    COMP_LIB_OBJS="$(COMP_LIB_OBJS)" \
+	    bash $(RULE_DIR)/scripts/gen_one_makefile.sh
 
 config:
 
@@ -133,8 +133,8 @@ DL_TOOLCHAIN_VARS = \
     TOOLCHAIN_DLDIR \
     OUTPUT_DIR \
 
-toolchain:
-	@$(foreach V,$(DL_TOOLCHAIN_VARS),$(V)=$($(V))) \
+toolchain:; true
+#	@$(foreach V,$(DL_TOOLCHAIN_VARS),$(V)=$($(V))) \
 	    CC=$(shell basename $(CC)) \
 	    AR=$(shell basename $(AR)) \
 	    RELPATH=` $(call Relative_TcPath,$(shell basename $(CC))) ` \
@@ -171,6 +171,7 @@ clean:
 	                             -or -name "*.o" \
 	                             -or -name "*.d" \
 	                             -or -name "*.gc*" \
+	                             | grep -v '$(OUTPUT_DIR)/compiler' \
 	        2>/dev/null)
 
 distclean:

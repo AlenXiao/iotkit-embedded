@@ -1,3 +1,12 @@
+define Append_Conditional
+$(if $(strip $(foreach V,$(4),$(filter -D$(V),$(CFLAGS)))),, \
+    $(if \
+        $(findstring $(foreach U,$(3),-D$(U)),$(foreach U,$(3),$(filter -D$(U),$(CFLAGS)))), \
+            $(eval $(strip $(1)) += $(2)) \
+    ) \
+)
+endef
+
 define Dump_Var
 	NUM=`echo "$(strip $($(1)))"|awk '{ print NF }'`; \
 	if (( $${NUM} \> 1 )); then \
@@ -45,7 +54,9 @@ define Brief_Log
 	elif [ "$1" = "ST" ]; then \
 	    COLOR_MARK="\033[0;33m"; \
 	fi; \
-    echo -ne "$${COLOR_MARK}"; \
+	if [ "$(PLAIN_LOG)" != "1" ]; then \
+	    echo -ne "$${COLOR_MARK}"; \
+	fi; \
 	if [ "$2" = "" ]; then \
 	    FIRST_DEP="$(firstword $(filter-out FORCE,$?))"; \
 	    SPACE_BAR="                                   "; \
@@ -63,7 +74,9 @@ define Brief_Log
 	        fi \
 	    done; \
 	fi; \
-	echo -ne "\033[0m"; \
+	if [ "$(PLAIN_LOG)" != "1" ]; then \
+	    echo -ne "\033[0m"; \
+	fi; \
 )
 endef
 

@@ -1,5 +1,9 @@
 NAME := linkkit_sdk_c
 
+$(NAME)_MBINS_TYPE := kernel
+$(NAME)_VERSION := 2.3.0
+$(NAME)_SUMMARY := IoT Connectivity Devkit Running on Embedded Devices for Alibaba Cloud
+
 $(NAME)_COMPONENTS := middleware/linkkit/hal
 
 GLOBAL_INCLUDES += \
@@ -16,10 +20,9 @@ GLOBAL_DEFINES   += \
     CONFIG_HTTP_AUTH_TIMEOUT=500 \
     CONFIG_MID_HTTP_TIMEOUT=500 \
     CONFIG_GUIDER_AUTH_TIMEOUT=500 \
-    CONFIG_MQTT_TX_MAXLEN=640 \
-    CONFIG_MQTT_RX_MAXLEN=1200 \
     WITH_MQTT_ZIP_TOPIC=1 \
-    WITH_MQTT_SUB_SHORTCUT=1
+    WITH_MQTT_SUB_SHORTCUT=1 \
+    WITH_MQTT_DYN_BUF=1
 
 ROOT_DIR := ../../../
 GLOBAL_INCLUDES += $(ROOT_DIR)middleware/linkkit/sdk-c/src/sdk-impl \
@@ -43,8 +46,6 @@ $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/dm \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/cm \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/mal \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/mal/ica \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/sal/include \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/sal/include/internal \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/ota \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/ota/impl \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/utils/misc  \
@@ -125,11 +126,6 @@ ifeq (y,$(FEATURE_HTTP2_COMM_ENABLED))
 $(NAME)_COMPONENTS += \
     middleware/linkkit/sdk-c/src/protocol/http2  \
     middleware/linkkit/sdk-c/src/services/http2_stream
-endif
-
-ifeq (y,$(FEATURE_SAL_ENABLED))
-$(NAME)_COMPONENTS += \
-    middleware/linkkit/sdk-c/src/services/mdal/sal
 endif
 
 #####################################################################
