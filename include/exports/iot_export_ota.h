@@ -2,10 +2,12 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #ifndef __OTA_EXPORT_H__
 #define __OTA_EXPORT_H__
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 #include "iot_import.h"
 
@@ -135,21 +137,6 @@ DLL_IOT_API int IOT_OTA_Deinit(void *handle);
  */
 DLL_IOT_API int IOT_OTA_ReportVersion(void *handle, const char *version);
 
-
-/**
- * @brief Request firmware image from cloud.
- *
- *
- * @param [in] handle: specify the OTA module.
- * @param [in] version: specify the firmware version in string format.
- *
- * @retval   0 : Successful.
- * @retval < 0 : Failed, the value is error code.
- * @see None.
- */
-DLL_IOT_API int IOT_OTA_RequestImage(void *handle, const char *version);
-
-
 /**
  * @brief Report detail progress to OTA server (optional).
  *        NOTE: please
@@ -163,23 +150,6 @@ DLL_IOT_API int IOT_OTA_RequestImage(void *handle, const char *version);
  * @see None.
  */
 DLL_IOT_API int IOT_OTA_ReportProgress(void *handle, IOT_OTA_Progress_t progress, const char *msg);
-
-
-/**
- * @brief Report detail progress to OTA server (optional).
- *        NOTE: please
- *
- * @param [in] handle: specify the OTA module.
- * @param [in] configScope: product or device.
- * @param [in] getType: file or other.
- * @param [in] attributeKeys: attribute key.
- *
- * @retval   0 : Successful.
- * @retval < 0 : Failed, the value is error code.
- * @see None.
- */
-DLL_IOT_API int IOT_OTA_GetConfig(void *handle, const char *configScope, const char *getType,
-                                  const char *attributeKeys);
 
 
 /**
@@ -261,5 +231,9 @@ DLL_IOT_API int IOT_OTA_GetLastError(void *handle);
 
 /** @} */ /* end of api_ota */
 /** @} */ /* end of api */
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif /* __OTA_EXPORT_H__ */

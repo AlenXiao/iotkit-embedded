@@ -20,6 +20,10 @@ typedef enum {
     /* MQTT: QoS is 1 */
     /* CoAP: CON */
     IOTX_CM_MESSAGE_NEED_ACK,
+    /* non ACK */
+    /* MQTT: QoS is 3 */
+    /* CoAP: NONE*/
+    IOTX_CM_MESSAGE_SUB_LOCAL,
     /* Maximum number of ack type */
     IOTX_CM_MESSAGE_ACK_MAX
 } iotx_cm_ack_types_t;
@@ -75,12 +79,17 @@ typedef enum IOTX_CM_EVENT_TYPES {
     IOTX_CM_EVENT_MAX
 } iotx_cm_event_types_t;
 
-
 /* The structure of cloud Connection event struct */
 typedef struct {
     iotx_cm_event_types_t                    type;
     void                                     *msg;
 } iotx_cm_event_msg_t;
+
+typedef struct {
+    char *topic;
+    uint8_t *payload;
+    uint32_t  payload_len;
+} event_msg_data_t;
 
 typedef void (*iotx_cm_data_handle_cb)(int fd, const char *topic, const char *payload, unsigned int payload_len,
                                        void *context);
@@ -96,14 +105,15 @@ typedef struct {
     uint32_t                      read_buf_size;
     iotx_cm_protocol_types_t      protocol_type;
     iotx_cm_event_handle_cb       handle_event;             /* Specify MQTT event handle */
-
+    void                          *context;
 } iotx_cm_init_param_t;
 
 typedef struct {
     iotx_cm_ack_types_t           ack_type;
     iotx_cm_sync_mode_types_t     sync_mode;
     uint32_t                      sync_timeout;
-    iotx_cm_event_handle_cb       ack_cb;
+    iotx_cm_data_handle_cb        ack_cb;
+    void                          *cb_context;
 } iotx_cm_ext_params_t;
 
 int iotx_cm_open(iotx_cm_init_param_t *params);

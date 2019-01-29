@@ -2,10 +2,12 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #ifndef _IOT_EXPORT_MQTT_H_
 #define _IOT_EXPORT_MQTT_H_
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 #define MUTLI_SUBSCIRBE_MAX                                     (5)
 
@@ -13,7 +15,8 @@
 typedef enum {
     IOTX_MQTT_QOS0 = 0,
     IOTX_MQTT_QOS1,
-    IOTX_MQTT_QOS2
+    IOTX_MQTT_QOS2,
+    IOTX_MQTT_QOS3_SUB_LOCAL
 } iotx_mqtt_qos_t;
 
 typedef enum {
@@ -350,4 +353,8 @@ DLL_IOT_API int IOT_MQTT_Publish_Simple(void *handle, const char *topic_name, in
 
 /** @} */ /* end of api */
 #endif /* MAL_ENABLED */
+
+#if defined(__cplusplus)
+}
+#endif
 #endif

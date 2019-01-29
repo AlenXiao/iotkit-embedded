@@ -13,8 +13,8 @@
 extern "C" {
 #endif /* __cplusplus */
 
-#define coap_malloc(size)       HAL_Malloc(size)
-#define coap_free(ptr)          HAL_Free(ptr)
+#define coap_malloc(size)       LITE_malloc(size, MEM_MAGIC, "coap.local")
+#define coap_free(ptr)          LITE_free(ptr)
 
 #define COAP_ERR(...)           log_err("coap_local", __VA_ARGS__)
 #define COAP_WRN(...)           log_warning("coap_local", __VA_ARGS__)
@@ -23,7 +23,7 @@ extern "C" {
 #define COAP_TRC(...)           log_debug("coap_local", __VA_ARGS__)
 #define COAP_DUMP(...)          log_debug("coap_local", __VA_ARGS__)
 #define COAP_DEBUG(...)         log_debug("coap_local", __VA_ARGS__)
-#define COAP_FLOW(...)          log_flow("coap_local", __VA_ARGS__)
+#define COAP_FLOW(...)          log_debug("coap_local", __VA_ARGS__)
 
 int platform_is_multicast(const char *ip_str);
 

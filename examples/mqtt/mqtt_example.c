@@ -16,21 +16,11 @@
 #define DEVICE_NAME             "test_01"
 #define DEVICE_SECRET           "t9GmMf2jb3LgWfXBaZD2r3aJrfVWBv56"
 
-char __product_key[PRODUCT_KEY_LEN + 1];
-char __device_name[DEVICE_NAME_LEN + 1];
-char __device_secret[DEVICE_SECRET_LEN + 1];
-
 /* These are pre-defined topics */
 #define TOPIC_UPDATE            "/"PRODUCT_KEY"/"DEVICE_NAME"/update"
 #define TOPIC_ERROR             "/"PRODUCT_KEY"/"DEVICE_NAME"/update/error"
 #define TOPIC_GET               "/"PRODUCT_KEY"/"DEVICE_NAME"/get"
-#define TOPIC_DATA              "/"PRODUCT_KEY"/"DEVICE_NAME"/data"
-
-/* These are pre-defined topics format*/
-#define TOPIC_UPDATE_FMT            "/%s/%s/update"
-#define TOPIC_ERROR_FMT             "/%s/%s/update/error"
-#define TOPIC_GET_FMT               "/%s/%s/get"
-#define TOPIC_DATA_FMT              "/%s/%s/data"
+#define TOPIC_DATA               "/"PRODUCT_KEY"/"DEVICE_NAME"/data"
 
 #define MQTT_MSGLEN             (1024)
 
@@ -126,13 +116,13 @@ static void _demo_message_arrive(void *pcontext, void *pclient, iotx_mqtt_event_
             EXAMPLE_TRACE("----");
             EXAMPLE_TRACE("PacketId: %d", ptopic_info->packet_id);
             EXAMPLE_TRACE("Topic: '%.*s' (Length: %d)",
-                        ptopic_info->topic_len,
-                        ptopic_info->ptopic,
-                        ptopic_info->topic_len);
+                          ptopic_info->topic_len,
+                          ptopic_info->ptopic,
+                          ptopic_info->topic_len);
             EXAMPLE_TRACE("Payload: '%.*s' (Length: %d)",
-                        ptopic_info->payload_len,
-                        ptopic_info->payload,
-                        ptopic_info->payload_len);
+                          ptopic_info->payload_len,
+                          ptopic_info->payload,
+                          ptopic_info->payload_len);
             EXAMPLE_TRACE("----");
             break;
         default:
@@ -150,12 +140,8 @@ int mqtt_client(void)
     iotx_mqtt_topic_info_t topic_msg;
     char msg_pub[128];
 
-    HAL_GetProductKey(__product_key);
-    HAL_GetDeviceName(__device_name);
-    HAL_GetDeviceSecret(__device_secret);
-
     /* Device AUTH */
-    if (0 != IOT_SetupConnInfo(__product_key, __device_name, __device_secret, (void **)&pconn_info)) {
+    if (0 != IOT_SetupConnInfo(PRODUCT_KEY, DEVICE_NAME, DEVICE_SECRET, (void **)&pconn_info)) {
         EXAMPLE_TRACE("AUTH request failed!");
         return -1;
     }
@@ -269,13 +255,12 @@ int mqtt_client(void)
     IOT_MQTT_Yield(pclient, 200);
 
     IOT_MQTT_Destroy(&pclient);
-    
+
     return 0;
 }
 
 int linkkit_main(void *paras)
 {
-    IOT_OpenLog("mqtt");
     IOT_SetLogLevel(IOT_LOG_DEBUG);
 
     user_argc = 0;
@@ -290,9 +275,7 @@ int linkkit_main(void *paras)
     HAL_SetProductKey(PRODUCT_KEY);
     HAL_SetDeviceName(DEVICE_NAME);
     HAL_SetDeviceSecret(DEVICE_SECRET);
-#if defined(SUPPORT_ITLS)
     HAL_SetProductSecret(PRODUCT_SECRET);
-#endif
     /* Choose Login Server */
     int domain_type = IOTX_CLOUD_REGION_SHANGHAI;
     IOT_Ioctl(IOTX_IOCTL_SET_DOMAIN, (void *)&domain_type);
@@ -303,7 +286,7 @@ int linkkit_main(void *paras)
 
     mqtt_client();
     IOT_DumpMemoryStats(IOT_LOG_DEBUG);
-    IOT_CloseLog();
+    IOT_SetLogLevel(IOT_LOG_NONE);
 
     EXAMPLE_TRACE("out of sample!");
 

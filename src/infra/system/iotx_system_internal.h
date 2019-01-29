@@ -63,14 +63,14 @@ SECURE_MODE _secure_mode_num(void);
 void _ident_partner(char *buf, int len);
 void _ident_module(char *buf, int len);
 int _fill_conn_string(char *dst, int len, const char *fmt, ...);
-void guider_print_dev_guider_info(iotx_device_info_pt dev,
+void guider_print_dev_guider_info(iotx_device_info_t *dev,
                                   char *partner_id,
                                   char *module_id,
                                   char *guider_url,
                                   int secure_mode,
                                   char *time_stamp,
                                   char *guider_sign);
-void guider_print_conn_info(iotx_conn_info_pt conn);
+void guider_print_conn_info(iotx_conn_info_t *conn);
 
 #ifndef MQTT_DIRECT
 int _http_response(char *payload,

@@ -7,9 +7,11 @@
 #include "zconfig_utils.h"
 #include "awss_enrollee.h"
 #include "awss_cmp.h"
+#include "awss_info.h"
 #include "awss_notify.h"
 #include "awss_timer.h"
 #include "awss_packet.h"
+#include "awss_statis.h"
 #include "awss_event.h"
 #include "awss_adha.h"
 #include "awss_aha.h"
@@ -23,7 +25,7 @@ extern "C"
 #define AWSS_PRESS_TIMEOUT_MS  (60000)
 
 extern int switch_ap_done;
-static uint8_t awss_stopped = 0;
+static uint8_t awss_stopped = 1;
 static uint8_t g_user_press = 0;
 static void *press_timer = NULL;
 
@@ -34,17 +36,24 @@ int awss_success_notify(void)
     g_user_press = 0;
     awss_press_timeout();
 
-    awss_cmp_local_init();
+    awss_cmp_local_init(AWSS_LC_INIT_SUC);
     awss_suc_notify_stop();
     awss_suc_notify();
+    awss_start_connectap_monitor();
+    AWSS_DISP_STATIS();
     return 0;
 }
 
 int awss_start(void)
 {
+    if (awss_stopped == 0) {
+        awss_debug("awss already running\n");
+        return -1;
+    }
+
+    awss_stopped = 0;
     awss_event_post(AWSS_START);
     produce_random(aes_random, sizeof(aes_random));
-    awss_stopped = 0;
 
     do {
         __awss_start();
@@ -60,7 +69,7 @@ int awss_start(void)
                     break;
 
                 if (os_sys_net_is_ready()) { // skip the adha failed
-                    awss_cmp_local_init();
+                    awss_cmp_local_init(AWSS_LC_INIT_ROUTER);
 
                     awss_open_adha_monitor();
                     while (!awss_is_ready_switch_next_adha()) {
@@ -89,7 +98,7 @@ int awss_start(void)
             if (os_sys_net_is_ready()) {
                 awss_open_aha_monitor();
 
-                awss_cmp_local_init();
+                awss_cmp_local_init(AWSS_LC_INIT_PAP);
                 char dest_ap = 0;
                 while (!awss_aha_monitor_is_timeout()) {
                     memset(ssid, 0, sizeof(ssid));
@@ -134,6 +143,7 @@ int awss_start(void)
 #endif
 
     awss_success_notify();
+    awss_stopped = 1;
 
     return 0;
 }
@@ -147,8 +157,11 @@ int awss_stop(void)
 #ifdef AWSS_SUPPORT_ADHA
     awss_close_adha_monitor();
 #endif
+    awss_stop_connectap_monitor();
+    g_user_press = 0;
+    awss_press_timeout();
+
     __awss_stop();
-    awss_cmp_local_deinit(0);
 
     return 0;
 }

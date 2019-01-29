@@ -107,6 +107,7 @@ struct tcp_pcb {
     void *recv_arg;
 };
 
+#if SAL_UDP_CLIENT_ENABLED
 struct udp_pcb;
 
 /** Function prototype for udp pcb receive callback functions
@@ -156,6 +157,7 @@ struct udp_pcb {
     /** user-supplied argument for the recv callback */
     void *recv_arg;
 };
+#endif
 
 #ifdef __cplusplus
 }

@@ -134,8 +134,9 @@ typedef enum {
 } CoAPMessageCode;
 
 typedef enum {
-    COAP_REQUEST_SUCCESS,
+    COAP_REQUEST_SUCCESS = 0,
     COAP_RECV_RESP_TIMEOUT,
+    COAP_RECV_RESP_SUC,
 } CoAPReqResult;
 
 typedef struct {
@@ -166,7 +167,7 @@ typedef void (*CoAPSendMsgHandler)(CoAPContext *context, CoAPReqResult result, v
 
 typedef void (*CoAPEventNotifier)(unsigned int event, NetworkAddr *remote, void *message);
 
-typedef void (*CoAPRecvMsgHandler) (CoAPContext *context, const char *paths, NetworkAddr *remote, CoAPMessage *message);
+typedef void (*CoAPRecvMsgHandler)(CoAPContext *context, const char *paths, NetworkAddr *remote, CoAPMessage *message);
 
 typedef int (*CoAPDataEncrypt)(CoAPContext *context, const char *paths, NetworkAddr *addr, CoAPMessage *message,
                                CoAPLenString *src, CoAPLenString *dest);
@@ -195,6 +196,10 @@ typedef struct {
     unsigned char        res_maxcount;
 } CoAPInitParam;
 
+typedef enum {
+    PATH_NORMAL,
+    PATH_FILTER,
+} path_type_t;
 
 CoAPContext *CoAPContext_create(CoAPInitParam *param);
 

@@ -15,6 +15,8 @@
 #include "h2_debug.h"
 #include "iot_export_http2.h"
 
+#define HTTP2_API_MALLOC(size) LITE_malloc(size, MEM_MAGIC, "http2.api")
+#define HTTP2_API_FREE(ptr)    do{if(ptr != NULL) LITE_free(ptr);}while(0)
 
 #define MAX_HTTP2_HOST_LEN                   (128)
 
@@ -52,7 +54,7 @@ static ssize_t send_callback(nghttp2_session *session, const uint8_t *data,
     int rv;
     connection = (http2_connection_t *)user_data;
 
-    NGHTTP2_DBG("send_callback data begins %s * %d,session->remote_window_size=%d!\r\n", (char *)data, (int)length,
+    NGHTTP2_DBG("send_callback data len %d, session->remote_window_size=%d!\r\n", (int)length,
                 session->remote_window_size);
     if (session->remote_window_size < length * 2) {
         HAL_SleepMs(50);
@@ -234,8 +236,8 @@ static int on_frame_recv_callback(nghttp2_session *session,
 *              `NGHTTP2_ERR_CALLBACK_FAILURE`.
  */
 static int on_h2_stream_close_callback(nghttp2_session *session, int32_t stream_id,
-                                    uint32_t error_code,
-                                    void *user_data)
+                                       uint32_t error_code,
+                                       void *user_data)
 {
     http2_connection_t *connection  = (http2_connection_t *)user_data;
 
@@ -290,12 +292,17 @@ static int on_data_chunk_recv_callback(nghttp2_session *session,
     if (req) {
         NGHTTP2_DBG("stream user data is not exist\n");
     }
-    NGHTTP2_DBG("[INFO] C <----------- S (DATA chunk) stream_id [%d]\n" "%lu bytes\n", stream_id, (unsigned long int)len);
-    NGHTTP2_DBG("data chunk: %s\n", data);
+    NGHTTP2_DBG("[INFO] C <----------- S (DATA chunk) stream_id [%d] :: %lu bytes\n", stream_id, (unsigned long int)len);
 
     if (connection->cbs && connection->cbs->on_user_chunk_recv_cb) {
         connection->cbs->on_user_chunk_recv_cb(stream_id, data, len, flags);
     }
+
+    nghttp2_session_consume_connection(session, len);
+    nghttp2_session_consume(session, stream_id, len);
+    nghttp2_submit_window_update(session, NGHTTP2_FLAG_NONE, 0, len);
+    nghttp2_submit_window_update(session, NGHTTP2_FLAG_NONE, stream_id, len);
+    nghttp2_session_send(session);
 
     return 0;
 }
@@ -489,7 +496,7 @@ int iotx_http2_client_send(http2_connection_t *conn, http2_data *h2_data)
     int send_flag = 0;
     int rv = 0;
     nghttp2_data_provider data_prd;
-    nghttp2_nv nva[15];
+    nghttp2_nv *nva = NULL;
     int nva_size = 0;
     http2_header *header = h2_data->header;
     int header_count = h2_data->header_count;
@@ -498,7 +505,12 @@ int iotx_http2_client_send(http2_connection_t *conn, http2_data *h2_data)
     int stream_id = h2_data->stream_id;
     int flags = h2_data->flag;
 
+
     if (header != NULL && header_count != 0) {
+        nva = (nghttp2_nv *)HTTP2_API_MALLOC(sizeof(nghttp2_nv) * header_count);
+        if (nva == NULL) {
+            return -1;
+        }
         nva_size = http2_nv_copy_nghttp2_nv(nva, nva_size, header, header_count);
     }
     /*upload to server*/
@@ -516,8 +528,9 @@ int iotx_http2_client_send(http2_connection_t *conn, http2_data *h2_data)
         rv = nghttp2_submit_request(conn->session, NULL, nva, nva_size, NULL, NULL);
         h2_data->stream_id = rv;
     }
+    HTTP2_API_FREE(nva);
 
-    if(rv < 0) {
+    if (rv < 0) {
         return rv;
     }
 
@@ -526,7 +539,7 @@ int iotx_http2_client_send(http2_connection_t *conn, http2_data *h2_data)
         rv = nghttp2_session_send(conn->session);
         NGHTTP2_DBG("nghttp2_session_send %d\r\n", rv);
     }
-    
+
     return rv;
 }
 
@@ -563,7 +576,7 @@ http2_connection_t *iotx_http2_client_connect(void *pclient, char *url, int port
     int rv;
     int ret = 0;
 
-    connection = LITE_calloc(1, sizeof(http2_connection_t));
+    connection = LITE_calloc(1, sizeof(http2_connection_t), MEM_MAGIC, "http2.api");
     if (connection == NULL) {
         return NULL;
     }
@@ -606,7 +619,7 @@ http2_connection_t *iotx_http2_client_connect(void *pclient, char *url, int port
         LITE_free(connection);
         return NULL;
     }
-
+    connection->status = 1;
     return connection;
 }
 
@@ -622,7 +635,7 @@ http2_connection_t *iotx_http2_client_connect_with_cb(void *pclient, char *url, 
     int rv;
     int ret = 0;
 
-    connection = LITE_calloc(1, sizeof(http2_connection_t));
+    connection = LITE_calloc(1, sizeof(http2_connection_t), MEM_MAGIC, "http2.api");
     if (connection == NULL) {
         return NULL;
     }
@@ -642,6 +655,7 @@ http2_connection_t *iotx_http2_client_connect_with_cb(void *pclient, char *url, 
 
     connection->cbs = cb;
     setup_nghttp2_callbacks(callbacks);
+
     rv = nghttp2_session_client_new((nghttp2_session **)&connection->session, callbacks, connection);
     if (rv != 0) {
         NGHTTP2_DBG("nghttp2_session_client_new3 %d", rv);
@@ -666,7 +680,7 @@ http2_connection_t *iotx_http2_client_connect_with_cb(void *pclient, char *url, 
         LITE_free(connection);
         return NULL;
     }
-
+    connection->status = 1;
     return connection;
 }
 
@@ -674,7 +688,7 @@ int iotx_http2_client_disconnect(http2_connection_t *conn)
 {
     /* Resource cleanup */
     if (conn == NULL) {
-        return 0;
+        return -1;
     }
     httpclient_close((httpclient_t *)conn->network);
     nghttp2_session_del(conn->session);
@@ -686,14 +700,19 @@ int iotx_http2_client_send_ping(http2_connection_t *conn)
 {
     int rv = 0;
     int send_flag;
-
-    nghttp2_submit_ping(conn->session, NGHTTP2_FLAG_NONE, NULL);
+    if (conn == NULL) {
+        return -1;
+    }
+    rv = nghttp2_submit_ping(conn->session, NGHTTP2_FLAG_NONE, NULL);
+    if (rv < 0) {
+        return rv;
+    }
     send_flag = nghttp2_session_want_write(conn->session);
     if (send_flag) {
         rv = nghttp2_session_send(conn->session);
         NGHTTP2_DBG("nghttp2_session_send %d\r\n", rv);
         if (rv < 0) {
-            return -1;
+            return rv;
         }
     }
     return 0;
@@ -725,8 +744,8 @@ int iotx_http2_update_window_size(http2_connection_t *conn)
  */
 int iotx_http2_exec_io(http2_connection_t *connection)
 {
-    if (nghttp2_session_want_read(connection->session) ||
-        nghttp2_session_want_write(connection->session)) {
+    if (nghttp2_session_want_read(connection->session) /*||
+        nghttp2_session_want_write(connection->session)*/) {
 
         int rv;
         rv = nghttp2_session_recv(connection->session);
@@ -734,12 +753,11 @@ int iotx_http2_exec_io(http2_connection_t *connection)
             NGHTTP2_DBG("nghttp2_session_recv error");
             return -1;
         }
-        rv = nghttp2_session_send(connection->session);
-        if (rv < 0) {
-            NGHTTP2_DBG("nghttp2_session_send error");
-            return -1;
-        }
+        // rv = nghttp2_session_send(connection->session);
+        // if (rv < 0) {
+        //     NGHTTP2_DBG("nghttp2_session_send error");
+        //     return -1;
+        // }
     }
-
     return 0;
 }

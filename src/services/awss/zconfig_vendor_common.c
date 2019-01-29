@@ -61,7 +61,7 @@ struct aws_info {
 #define aws_start_timestamp          (aws_info->start_timestamp)
 #define aws_stop                     (aws_info->stop)
 
-#define aws_channel_lock_timeout_ms  (4 * 1000)
+#define aws_channel_lock_timeout_ms  (8 * 1000)
 
 static const uint8_t aws_fixed_scanning_channels[] = {
     1, 6, 11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
@@ -84,6 +84,8 @@ uint8_t aws_result_bssid[ETH_ALEN];/* mac addr */
 uint8_t aws_result_channel = 0;
 uint8_t aws_result_encry;
 uint8_t aws_result_auth;
+
+int aws_80211_frame_handler(char *, int, enum AWSS_LINK_TYPE, int, signed char);
 
 uint8_t zconfig_get_lock_chn(void)
 {
@@ -110,17 +112,12 @@ void zconfig_got_ssid_passwd_callback(uint8_t *ssid, uint8_t *passwd,
                                       uint8_t *bssid, uint8_t auth, uint8_t encry, uint8_t channel)
 {
     if (bssid) {
-        awss_debug("ssid:%s, bssid:%02x%02x%02x%02x%02x%02x, %s, %s, %d\r\n",
-                   ssid,
-                   bssid[0], bssid[1], bssid[2],
-                   bssid[3], bssid[4], bssid[5],
-                   zconfig_auth_str(auth), zconfig_encry_str(encry),
-                   channel);
+        awss_debug("ssid:%s, bssid:%02x%02x%02x%02x%02x%02x, %d\r\n",
+                   ssid, bssid[0], bssid[1], bssid[2],
+                   bssid[3], bssid[4], bssid[5], channel);
     } else {
-        awss_debug("ssid:%s, bssid:--, %s, %s, %d\r\n",
-                   ssid,
-                   zconfig_auth_str(auth), zconfig_encry_str(encry),
-                   channel);
+        awss_debug("ssid:%s, bssid:--, %d\r\n",
+                   ssid, channel);
     }
 
     memset(aws_result_ssid, 0, sizeof(aws_result_ssid));
@@ -398,6 +395,7 @@ timeout_recving:
             rescan_timer = HAL_Timer_Create("rescan", (void(*)(void *))rescan_monitor, NULL);
         HAL_Timer_Stop(rescan_timer);
         HAL_Timer_Start(rescan_timer, RESCAN_MONITOR_TIMEOUT_MS);
+        os_awss_close_monitor();
         while (rescan_available == 0) {
             if (awss_get_config_press() ||
                 aws_stop == AWS_STOPPING) {  // user interrupt sleep
@@ -421,6 +419,7 @@ timeout_recving:
 #endif
 
     aws_start_timestamp = os_get_time_ms();
+    os_awss_open_monitor(aws_80211_frame_handler);
     goto rescanning;
 
 success:

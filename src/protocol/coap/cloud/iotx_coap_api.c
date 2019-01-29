@@ -105,7 +105,7 @@ static int iotx_get_token_from_json(char *p_str, char *p_token, int len)
         return IOTX_ERR_INVALID_PARAM;
     }
 
-    p_value = LITE_json_value_of("token", p_str);
+    p_value = LITE_json_value_of("token", p_str, MEM_MAGIC, "coap.cloud");
     if (NULL != p_value) {
         if (len - 1 < strlen(p_value)) {
             return IOTX_ERR_BUFF_TOO_SHORT;
@@ -302,7 +302,7 @@ int iotx_get_well_known(iotx_coap_context_t *p_context)
     return IOTX_SUCCESS;
 }
 
-static void iotx_coap_mid_rsphdl(void *arg, void *p_response)
+static void iotx_coap_report_rsphdl(void *arg, void *p_response)
 {
     int                     p_payload_len = 0;
     unsigned char          *p_payload = NULL;
@@ -311,105 +311,40 @@ static void iotx_coap_mid_rsphdl(void *arg, void *p_response)
 
     IOT_CoAP_GetMessageCode(p_response, &resp_code);
     IOT_CoAP_GetMessagePayload(p_response, &p_payload, &p_payload_len);
-    COAP_DEBUG("MID Report: CoAP response code = %d", resp_code);
-    COAP_DEBUG("MID Report: CoAP msg_len = %d", p_payload_len);
+    COAP_DEBUG("Report response: CoAP response code = %d", resp_code);
+    COAP_DEBUG("Report response: CoAP msg_len = %d", p_payload_len);
     if (p_payload_len > 0) {
-        COAP_DEBUG("MID Report: CoAP msg = '%s'", p_payload);
+        COAP_DEBUG("Report response: CoAP msg = '%s'", p_payload);
         msg = json_get_value_by_name((char *)p_payload, p_payload_len, "id", &p_payload_len, 0);
         if (NULL != msg) {
-            COAP_DEBUG("MID Report: CoAP mid_report responseID = '%s'", msg);
+            COAP_DEBUG("Report response: CoAP mid_report responseID = '%s'", msg);
         } else {
-            COAP_WRN("MID Report: CoAP mid_report responseID not found in msg");
+            COAP_WRN("Report response: CoAP mid_report responseID not found in msg");
         }
     } else {
-        COAP_WRN("MID Report: CoAP response payload_len = 0");
+        COAP_WRN("Report response: CoAP response payload_len = 0");
     }
 }
 
-/* report ModuleID */
-static int iotx_coap_report_mid(iotx_coap_context_t *p_context)
+static int coap_report_func(void *handle, const char *topic_name, int req_ack, void *data, int len)
 {
-    int                     ret;
-    char                    topic_name[IOTX_URI_MAX_LEN + 1];
     iotx_message_t          message;
-    char                    requestId[MIDREPORT_REQID_LEN + 1] = {0};
-    iotx_coap_t            *p_iotx_coap = (iotx_coap_t *)p_context;
-    char                    pid[PID_STRLEN_MAX + 1] = {0};
-    char                    mid[MID_STRLEN_MAX + 1] = {0};
-    Cloud_CoAPContext            *p_coap_ctx = NULL;
-
-    memset(pid, 0, sizeof(pid));
-    memset(mid, 0, sizeof(mid));
-
-    if (0 == HAL_GetPartnerID(pid)) {
-        COAP_DEBUG("PartnerID is Null");
-        return SUCCESS_RETURN;
-    }
-    if (0 == HAL_GetModuleID(mid)) {
-        COAP_DEBUG("ModuleID is Null");
-        return SUCCESS_RETURN;
-    }
-    if (NULL == p_iotx_coap) {
-        COAP_ERR("Invalid param: p_context is NULL");
-        return FAIL_RETURN;
-    }
-
-    COAP_DEBUG("MID Report: started in CoAP");
-    p_coap_ctx = (Cloud_CoAPContext *)p_iotx_coap->p_coap_ctx;
-
-    iotx_midreport_reqid(requestId,
-                         p_iotx_coap->p_devinfo->product_key,
-                         p_iotx_coap->p_devinfo->device_name);
-    /* 1,generate json data */
-    char *msg = HAL_Malloc(MIDREPORT_PAYLOAD_LEN);
-    if (NULL == msg) {
-        COAP_ERR("allocate mem failed");
-        return FAIL_RETURN;
-    }
-
-    iotx_midreport_payload(msg,
-                           requestId,
-                           mid,
-                           pid);
-
-    COAP_DEBUG("MID Report: json data = '%s'", msg);
+    char coap_topic[100] = {0};
 
     memset(&message, 0, sizeof(iotx_message_t));
-
-    message.p_payload = (unsigned char *)msg;
-    message.payload_len = (unsigned short)strlen(msg);
-    message.resp_callback = iotx_coap_mid_rsphdl;
-    message.msg_type = IOTX_MESSAGE_NON;
+    message.p_payload = (unsigned char *)data;
+    message.payload_len = len;
+    message.resp_callback = iotx_coap_report_rsphdl;
+    if (req_ack == 0) {
+        message.msg_type = IOTX_MESSAGE_NON;
+    } else {
+        message.msg_type = IOTX_MESSAGE_CON;
+    }
     message.content_type = IOTX_CONTENT_TYPE_JSON;
 
-    /* 2,generate topic name */
-    ret = iotx_midreport_topic(topic_name,
-                               "/topic",
-                               p_iotx_coap->p_devinfo->product_key,
-                               p_iotx_coap->p_devinfo->device_name);
-
-    COAP_DEBUG("MID Report: topic name = '%s'", topic_name);
-
-    if (ret < 0) {
-        COAP_ERR("generate topic name of info failed");
-        HAL_Free(msg);
-        return FAIL_RETURN;
-    }
-
-    if (IOTX_SUCCESS != (ret = IOT_CoAP_SendMessage(p_context, topic_name, &message))) {
-        COAP_ERR("send CoAP msg failed, ret = %d", ret);
-        HAL_Free(msg);
-        return FAIL_RETURN;
-    }
-    HAL_Free(msg);
-    COAP_DEBUG("MID Report: IOT_CoAP_SendMessage() = %d", ret);
-
-    ret = Cloud_CoAPMessage_recv(p_coap_ctx, CONFIG_COAP_AUTH_TIMEOUT, 1);
-    COAP_DEBUG("MID Report: finished, ret = Cloud_CoAPMessage_recv() = %d", ret);
-
-    return SUCCESS_RETURN;
+    HAL_Snprintf(coap_topic, 100, "/topic%s", topic_name);
+    return IOT_CoAP_SendMessage(handle, (char *)coap_topic, &message);
 }
-
 
 int iotx_aes_cbc_encrypt(const unsigned char *src, int len, const unsigned char *key, void *out)
 {
@@ -576,7 +511,7 @@ int IOT_CoAP_DeviceNameAuth(iotx_coap_context_t *p_context)
     Cloud_CoAPMessage_destory(&message);
 
     if (COAP_SUCCESS != ret) {
-        COAP_DEBUG("Send authentication message to server failed ret = %d", ret);
+        COAP_DEBUG("Send authentication message to server failed, ret = %d", ret);
         return IOTX_ERR_SEND_MSG_FAILED;
     }
 
@@ -586,14 +521,27 @@ int IOT_CoAP_DeviceNameAuth(iotx_coap_context_t *p_context)
         return IOTX_ERR_AUTH_FAILED;
     }
 
+
+    iotx_set_report_func(coap_report_func);
     /* report module id */
-    if (0) {
-        ret = iotx_coap_report_mid(p_context);
-        if (SUCCESS_RETURN != ret) {
-            COAP_DEBUG("Send ModuleId message to server(CoAP) failed ret = %d", ret);
-            return IOTX_ERR_SEND_MSG_FAILED;
-        }
+    ret = iotx_report_mid(p_context);
+    if (SUCCESS_RETURN != ret) {
+        COAP_DEBUG("Send ModuleId message to server(CoAP) failed, ret = %d", ret);
+        return IOTX_ERR_SEND_MSG_FAILED;
     }
+    /* report device information */
+    ret = iotx_report_devinfo(p_context);
+    if (SUCCESS_RETURN != ret) {
+        COAP_DEBUG("Send devinfo message to server(CoAP) failed, ret = %d", ret);
+        return IOTX_ERR_SEND_MSG_FAILED;
+    }
+    /* report firmware */
+    ret = iotx_report_firmware_version(p_context);
+    if (SUCCESS_RETURN != ret) {
+        COAP_DEBUG("Send firmware message to server(CoAP) failed, ret = %d", ret);
+        return IOTX_ERR_SEND_MSG_FAILED;
+    }    
+
     return IOTX_SUCCESS;
 }
 
@@ -637,6 +585,15 @@ static int iotx_split_path_2_option(char *uri, Cloud_CoAPMessage *message)
     return IOTX_SUCCESS;
 }
 
+uint32_t IOT_CoAP_GetCurToken(iotx_coap_context_t *p_context)
+{
+    if (p_context == NULL) {
+        return IOTX_ERR_INVALID_PARAM;
+    }
+    iotx_coap_t *p_iotx_coap = (iotx_coap_t *)p_context;
+
+    return p_iotx_coap->coap_token;
+}
 int IOT_CoAP_SendMessage(iotx_coap_context_t *p_context, char *p_path, iotx_message_t *p_message)
 {
 
@@ -657,6 +614,10 @@ int IOT_CoAP_SendMessage(iotx_coap_context_t *p_context, char *p_path, iotx_mess
         return IOTX_ERR_INVALID_PARAM;
     }
 
+    COAP_INFO("Upstream Topic: '%s'", p_path);
+    COAP_INFO("Upstream Payload:");
+    iotx_facility_json_print((const char *)p_message->p_payload, LOG_INFO_LEVEL, '>');
+
     /* as this function only support POST request message, type ACK and RST shall be considered error parameters */
     if (p_message->msg_type != IOTX_MESSAGE_CON && p_message->msg_type != IOTX_MESSAGE_NON) {
         return IOTX_ERR_INVALID_PARAM;
@@ -671,7 +632,7 @@ int IOT_CoAP_SendMessage(iotx_coap_context_t *p_context, char *p_path, iotx_mess
     if (p_iotx_coap->is_authed) {
 
         Cloud_CoAPMessage_init(&message);
-        Cloud_CoAPMessageType_set(&message, COAP_MESSAGE_TYPE_CON);     /* p_message->msg_type is ignored */
+        Cloud_CoAPMessageType_set(&message, p_message->msg_type);
         Cloud_CoAPMessageCode_set(&message, COAP_MSG_CODE_POST);
         Cloud_CoAPMessageId_set(&message, Cloud_CoAPMessageId_gen(p_coap_ctx));
         len = iotx_get_coap_token(p_iotx_coap, token);
@@ -783,6 +744,24 @@ int IOT_CoAP_GetMessagePayload(void *p_message, unsigned char **pp_payload, int 
     return IOTX_SUCCESS;
 }
 
+int  IOT_CoAP_GetMessageToken(void *p_message, unsigned int *token)
+{
+
+    Cloud_CoAPMessage *message = NULL;
+
+    if (NULL == p_message || NULL == token) {
+        COAP_ERR("Invalid paramter p_message %p, token= %p", p_message, token);
+        return -1;
+    }
+    message = (Cloud_CoAPMessage *)p_message;
+
+    *token = ((unsigned int)(message->token[3]) & 0xff) << 24;
+    *token += ((unsigned int)(message->token[2]) & 0xff) << 16;
+    *token += ((unsigned int)(message->token[1]) & 0xff) << 8;
+    *token += ((unsigned int)(message->token[0]) & 0xff);
+    return 0;
+}
+
 int  IOT_CoAP_GetMessageCode(void *p_message, iotx_coap_resp_code_t *p_resp_code)
 {
     Cloud_CoAPMessage *message = NULL;
@@ -852,6 +831,10 @@ iotx_coap_context_t *IOT_CoAP_Init(iotx_coap_config_t *p_config)
         strncpy(p_iotx_coap->p_devinfo->product_key,  p_config->p_devinfo->product_key, IOTX_PRODUCT_KEY_LEN);
         strncpy(p_iotx_coap->p_devinfo->device_secret, p_config->p_devinfo->device_secret, IOTX_DEVICE_SECRET_LEN);
         strncpy(p_iotx_coap->p_devinfo->device_name,  p_config->p_devinfo->device_name, IOTX_DEVICE_NAME_LEN);
+
+        HAL_SetDeviceName(p_config->p_devinfo->device_name);
+        HAL_SetProductKey(p_config->p_devinfo->product_key);
+        HAL_SetDeviceSecret(p_config->p_devinfo->device_secret);
     }
 
     /*Init coap token*/

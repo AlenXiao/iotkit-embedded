@@ -19,11 +19,12 @@
 #define MAL_TIMEOUT_FOREVER -1
 #define MAL_MC_PACKET_ID_MAX (65535)
 #define MAL_MC_TOPIC_NAME_MAX_LEN (128)
-#define MAL_MC_MAX_BUFFER_NUM  10
+#define MAL_MC_DEFAULT_BUFFER_NUM  1
+#define MAL_MC_MAX_BUFFER_NUM  14
 #define MAL_MC_MAX_TOPIC_LEN   128
 #define MAL_MC_MAX_MSG_LEN     512
 
-#define MAL_MC_DEAFULT_TIMEOUT   (5000)
+#define MAL_MC_DEAFULT_TIMEOUT   (8000)
 #define GUIDER_SIGN_LEN             (66)
 #define GUIDER_TS_LEN               (16)
 
@@ -40,12 +41,16 @@
 typedef struct at_mqtt_msg_buff_s{
     uint8_t  write_index;
     uint8_t  read_index;
+    uint8_t  last_write_index;
     uint8_t  valid_flag[MAL_MC_MAX_BUFFER_NUM];
-    char     topic[MAL_MC_MAX_BUFFER_NUM][MAL_MC_MAX_TOPIC_LEN];
-    char     msg_data[MAL_MC_MAX_BUFFER_NUM][MAL_MC_MAX_MSG_LEN];
+    uint8_t  buffer_num;
+    char*    topic[MAL_MC_MAX_BUFFER_NUM];
+    char*    msg_data[MAL_MC_MAX_BUFFER_NUM];
     void*    buffer_mutex;
 } at_mqtt_msg_buff_t;
 static at_mqtt_msg_buff_t    g_at_mqtt_buff_mgr;
+static char g_at_mqtt_topic[MAL_MC_DEFAULT_BUFFER_NUM][MAL_MC_TOPIC_NAME_MAX_LEN];
+static char g_at_mqtt_msg_data[MAL_MC_DEFAULT_BUFFER_NUM][MAL_MC_MAX_MSG_LEN];
 
 static int mal_mc_check_state_normal(iotx_mc_client_t *c);
 static int mal_mc_release(iotx_mc_client_t *c);
@@ -89,6 +94,40 @@ static int mal_mc_check_rule(char *iterm, iotx_mc_topic_type_t type)
     return SUCCESS_RETURN;
 }
 
+/* check whether the topic is matched or not */
+static char mal_mc_is_topic_matched(char *topicFilter, const char *topicName)
+{
+    if (!topicFilter || !topicName) {
+        return 0;
+    }
+    char *curf = topicFilter;
+    const char *curn = topicName;
+    const char *curn_end = curn + strlen(topicName);
+
+    while (*curf && curn < curn_end) {
+        if (*curn == '/' && *curf != '/') {
+            break;
+        }
+
+        if (*curf != '+' && *curf != '#' && *curf != *curn) {
+            break;
+        }
+
+        if (*curf == '+') {
+            /* skip until we meet the next separator, or end of string */
+            const char *nextpos = curn + 1;
+            while (nextpos < curn_end && *nextpos != '/') {
+                nextpos = ++curn + 1;
+            }
+        } else if (*curf == '#') {
+            curn = curn_end - 1;    /* skip until end of string */
+        }
+        curf++;
+        curn++;
+    }
+
+    return (curn == curn_end) && (*curf == '\0');
+}
 /* Check topic name */
 /* 0, topic name is valid; NOT 0, topic name is invalid */
 static int mal_mc_check_topic(const char *topicName, iotx_mc_topic_type_t type)
@@ -102,7 +141,7 @@ static int mal_mc_check_topic(const char *topicName, iotx_mc_topic_type_t type)
     }
 
     if (strlen(topicName) > MAL_MC_TOPIC_NAME_MAX_LEN) {
-        mal_err("len of topicName exceeds 64");
+        mal_err("len of topicName(%d) exceeds 64", strlen(topicName));
         return FAIL_RETURN;
     }
 
@@ -267,7 +306,9 @@ static int MALMQTTUnsubscribe(iotx_mc_client_t *c, const char *topicFilter, unsi
 
     iotx_mc_topic_handle_t *h;
     for (h = c->first_sub_handle; h != NULL; h = h->next) {
-        if ((strlen(topicFilter) == strlen(h->topic_filter)) && (strcmp(topicFilter, (char *)h->topic_filter) == 0)) {
+        if (((strlen(topicFilter) == strlen(h->topic_filter))
+        && (strcmp(topicFilter, (char *)h->topic_filter) == 0))
+        || (mal_mc_is_topic_matched((char *)h->topic_filter, topicFilter))) {
             remove_handle_from_list(c, h);
         }
     }
@@ -301,34 +342,51 @@ static int mal_mc_get_next_packetid(iotx_mc_client_t *c)
 /* handle PUBLISH packet received from remote MQTT broker */
 static int iotx_mc_handle_recv_PUBLISH(iotx_mc_client_t *c, char *topic, char *msg)
 {
-    iotx_mqtt_topic_info_t topic_msg;
+    iotx_mqtt_topic_info_t topic_msg = {0};
     int flag_matched = 0;
 
-    if (!c) {
+    if (!c || !topic || !msg) {
         return FAIL_RETURN;
     }
-    mal_debug("iotx_mc_handle_recv_PUBLISH topic=%s msg=%s", topic, msg);
+    mal_debug("recv pub topic=%s msg=%s", topic, msg);
+    /* flowControl for specific topic */
+    static uint64_t time_prev = 0;
+    uint64_t time_curr = 0;
     char *filterStr = "{\"method\":\"thing.service.property.set\"";
     int filterLen = strlen(filterStr);
+
     if (0 == memcmp(msg, filterStr, filterLen)) {
-	    mal_debug("iotx_mc_handle_recv_PUBLISH match filterstring");
-        return SUCCESS_RETURN;
+        //mal_debug("iotx_mc_handle_recv_PUBLISH match filterstring");
+        time_curr = HAL_UptimeMs();
+        if (time_curr < time_prev) {
+            time_curr = time_prev;
+        }
+        if ((time_curr - time_prev) <= (uint64_t)50) {
+            mal_debug("pub over threshould");
+            return SUCCESS_RETURN;
+        } else {
+            time_prev = time_curr;
+        }
     }
 
     /* we have to find the right message handler - indexed by topic */
     HAL_MutexLock(c->lock_generic);
     iotx_mc_topic_handle_t *h;
     for (h = c->first_sub_handle; h != NULL; h = h->next) {
-        if ((strlen(topic) == strlen(h->topic_filter)) && (strcmp(topic, (char *)h->topic_filter) == 0)) {
-            mal_debug("iotx_mc_handle_recv_PUBLISH topic be matched");
+        if (((strlen(topic) == strlen(h->topic_filter))
+           && (strcmp(topic, (char *)h->topic_filter) == 0))
+           ||(mal_mc_is_topic_matched((char *)h->topic_filter, topic))) {
+            mal_debug("pub topic is matched");
 
             iotx_mc_topic_handle_t *msg_handle = h;
             HAL_MutexUnlock(c->lock_generic);
 
             if (NULL != msg_handle->handle.h_fp) {
-                iotx_mqtt_event_msg_t event_msg;
+                iotx_mqtt_event_msg_t event_msg = {0};
                 topic_msg.payload = msg;
+                topic_msg.payload_len = strlen(msg);
                 topic_msg.ptopic = topic;
+                topic_msg.topic_len = strlen(topic);
                 event_msg.event_type = IOTX_MQTT_EVENT_PUBLISH_RECEIVED;
                 event_msg.msg = &topic_msg;
                 msg_handle->handle.h_fp(msg_handle->handle.pcontext, c, &event_msg);
@@ -345,12 +403,16 @@ static int iotx_mc_handle_recv_PUBLISH(iotx_mc_client_t *c, char *topic, char *m
         mal_debug("NO matching any topic, call default handle function");
 
         if (NULL != c->handle_event.h_fp) {
-            iotx_mqtt_event_msg_t msg;
+            iotx_mqtt_event_msg_t event_msg = {0};
 
-            msg.event_type = IOTX_MQTT_EVENT_PUBLISH_RECEIVED;
-            msg.msg = &topic_msg;
+            topic_msg.payload = msg;
+            topic_msg.payload_len = strlen(msg);
+            topic_msg.ptopic = topic;
+            topic_msg.topic_len = strlen(topic);
+            event_msg.event_type = IOTX_MQTT_EVENT_PUBLISH_RECEIVED;
+            event_msg.msg = &topic_msg;
 
-            c->handle_event.h_fp(c->handle_event.pcontext, c, &msg);
+            c->handle_event.h_fp(c->handle_event.pcontext, c, &event_msg);
         }
     }
 
@@ -368,12 +430,17 @@ static int mal_mc_cycle(iotx_mc_client_t *c, iotx_time_t *timer)
         return FAIL_RETURN;
     }
 
-    iotx_mc_state_t state = mal_mc_get_client_state(c);
-    if (state != IOTX_MC_STATE_CONNECTED) {
+    if (HAL_MDAL_MAL_State() == IOTX_MC_STATE_CONNECTED) {
+        mal_mc_set_client_state(c, IOTX_MC_STATE_CONNECTED);
+    }
+
+    if (mal_mc_get_client_state(c) != IOTX_MC_STATE_CONNECTED) {
+        mal_err("mal state = %d error", mal_mc_get_client_state(c));
         return MQTT_STATE_ERROR;
     }
 
-    if ((state = HAL_MDAL_MAL_State()) != IOTX_MC_STATE_CONNECTED) {
+    if (HAL_MDAL_MAL_State() != IOTX_MC_STATE_CONNECTED) {
+        mal_err("hal mal state = %d error", HAL_MDAL_MAL_State());
         mal_mc_set_client_state(c, IOTX_MC_STATE_DISCONNECTED);
         return MQTT_NETWORK_ERROR;
     }
@@ -382,7 +449,7 @@ static int mal_mc_cycle(iotx_mc_client_t *c, iotx_time_t *timer)
     rc = mal_mc_data_copy_from_buf(topic, msg);
     if (rc != SUCCESS_RETURN) {
         /* mal_debug("wait data timeout"); */
-        return SUCCESS_RETURN;
+        return rc;
     }
 
     rc = iotx_mc_handle_recv_PUBLISH(c, topic, msg);
@@ -554,11 +621,23 @@ int mal_mc_recv_buf_init()
 {
     g_at_mqtt_buff_mgr.read_index  = 0;
     g_at_mqtt_buff_mgr.write_index = 0;
+    g_at_mqtt_buff_mgr.last_write_index = 0;
+    g_at_mqtt_buff_mgr.buffer_num = MAL_MC_DEFAULT_BUFFER_NUM;
 
     for (int i = 0; i < MAL_MC_MAX_BUFFER_NUM; i++) {
         g_at_mqtt_buff_mgr.valid_flag[i] = 0;
+        if(i < MAL_MC_DEFAULT_BUFFER_NUM)
+        {
+            g_at_mqtt_buff_mgr.topic[i] = g_at_mqtt_topic[i];
+            g_at_mqtt_buff_mgr.msg_data[i] = g_at_mqtt_msg_data[i];
         memset(g_at_mqtt_buff_mgr.topic[i], 0, MAL_MC_MAX_TOPIC_LEN);
         memset(g_at_mqtt_buff_mgr.msg_data[i], 0, MAL_MC_MAX_MSG_LEN);
+        }
+        else
+        {
+           g_at_mqtt_buff_mgr.topic[i] = NULL;
+           g_at_mqtt_buff_mgr.msg_data[i] = NULL;
+        }
     }
 
     if (NULL == (g_at_mqtt_buff_mgr.buffer_mutex = HAL_MutexCreate())) {
@@ -573,11 +652,29 @@ void mal_mc_recv_buf_deinit()
 {
     g_at_mqtt_buff_mgr.read_index  = 0;
     g_at_mqtt_buff_mgr.write_index = 0;
+    g_at_mqtt_buff_mgr.last_write_index = 0;
 
     for (int i = 0; i < MAL_MC_MAX_BUFFER_NUM; i++) {
         g_at_mqtt_buff_mgr.valid_flag[i] = 0;
+        if(i < MAL_MC_DEFAULT_BUFFER_NUM)
+        {
         memset(g_at_mqtt_buff_mgr.topic[i], 0, MAL_MC_MAX_TOPIC_LEN);
         memset(g_at_mqtt_buff_mgr.msg_data[i], 0, MAL_MC_MAX_MSG_LEN);
+        }
+        else
+        {
+           if(i < g_at_mqtt_buff_mgr.buffer_num)
+           {
+               if(g_at_mqtt_buff_mgr.topic[i] != NULL)
+               {
+                   mal_free(g_at_mqtt_buff_mgr.topic[i]);
+               }
+               if(g_at_mqtt_buff_mgr.msg_data[i] != NULL)
+               {
+                   mal_free(g_at_mqtt_buff_mgr.msg_data[i]);
+               }
+           }
+        }
     }
 
     HAL_MutexDestroy(g_at_mqtt_buff_mgr.buffer_mutex);
@@ -691,8 +788,9 @@ static int mal_mc_release(iotx_mc_client_t *pClient)
     return SUCCESS_RETURN;
 }
 
-#define GUIDER_DEFAULT_TS_STR       "2524608000000"
+#ifndef MAL_ICA_ENABLED
 
+#define GUIDER_DEFAULT_TS_STR       "2524608000000"
 static void guider_get_timestamp_str(char *buf, int len)
 {
     HAL_Snprintf(buf, len, "%s", GUIDER_DEFAULT_TS_STR);
@@ -732,6 +830,7 @@ static int _calc_hmac_signature(
     memcpy(hmac_sigbuf, signature, hmac_buflen);
     return 0;
 }
+#endif /* MAL_ICA_ENABLED */
 
 int iotx_mdal_get_auth_username_passwd(char* username, char* password)
 {
@@ -773,7 +872,7 @@ int iotx_mdal_get_auth_username_passwd(char* username, char* password)
 #else 
     mal_err("Get username and passwd feature is not supported, when MAL_ICA_ENABLED is y");
     return -1;
-#endif
+#endif /* MAL_ICA_ENABLED */
 }
 
 int mal_mc_data_copy_to_buf(char *topic, char *message)
@@ -788,40 +887,66 @@ int mal_mc_data_copy_to_buf(char *topic, char *message)
 
     if ((strlen(topic) >= MAL_MC_MAX_TOPIC_LEN)||
         (strlen(message) >= MAL_MC_MAX_MSG_LEN)) {
-        mal_err("topic or message too large");
+        mal_err("topic(%d) or message(%d) too large", strlen(topic), strlen(message));
         return -1;
     }
 
     HAL_MutexLock(g_at_mqtt_buff_mgr.buffer_mutex);
     write_index     = g_at_mqtt_buff_mgr.write_index;
 
-    if (g_at_mqtt_buff_mgr.valid_flag[write_index]) {
+    if ((g_at_mqtt_buff_mgr.valid_flag[write_index]) 
+         && (g_at_mqtt_buff_mgr.buffer_num == MAL_MC_MAX_BUFFER_NUM)) {
         mal_err("buffer is full");
 
         HAL_MutexUnlock(g_at_mqtt_buff_mgr.buffer_mutex);
         return -1;
     }
+    if(g_at_mqtt_buff_mgr.valid_flag[write_index])
+    {
+        int last_write_index = write_index;
+        g_at_mqtt_buff_mgr.last_write_index = last_write_index;
+        write_index = g_at_mqtt_buff_mgr.buffer_num;
+        mal_err("increase buffer to %d", g_at_mqtt_buff_mgr.buffer_num);
+        g_at_mqtt_buff_mgr.topic[write_index] = mal_malloc(MAL_MC_MAX_TOPIC_LEN);
+        if(g_at_mqtt_buff_mgr.topic[write_index] == NULL)
+        {
+            mal_err("increase buffer failed, drop it");
+            return -1;
+        }
+        g_at_mqtt_buff_mgr.msg_data[write_index] = mal_malloc(MAL_MC_MAX_MSG_LEN);
+        if(g_at_mqtt_buff_mgr.msg_data[write_index] == NULL)
+        {
+            mal_err("increase buffer failed, drop it");
+            mal_free(g_at_mqtt_buff_mgr.topic[write_index]);
+            return -1;
+        }
+        g_at_mqtt_buff_mgr.buffer_num ++;
+    }
+    else
+    {
+        g_at_mqtt_buff_mgr.last_write_index = 0;
+    }
 
     copy_ptr = g_at_mqtt_buff_mgr.topic[write_index];
-
-    while (*topic) {
-        *copy_ptr++ = *topic++;
-    }
-
+    memcpy(copy_ptr, topic, strlen(topic));
     copy_ptr = g_at_mqtt_buff_mgr.msg_data[write_index];
-
-    while (*message) {
-        *copy_ptr++ = *message++;
-    }
+    memcpy(copy_ptr, message, strlen(message));
 
     g_at_mqtt_buff_mgr.valid_flag[write_index] = 1;
     write_index++;
 
-    if (write_index >= MAL_MC_MAX_BUFFER_NUM) {
+    if (write_index >= g_at_mqtt_buff_mgr.buffer_num) {
         write_index = 0;
     }
 
+    if(g_at_mqtt_buff_mgr.last_write_index != 0)
+    {
+        g_at_mqtt_buff_mgr.write_index = g_at_mqtt_buff_mgr.last_write_index;
+    }
+    else
+    {
     g_at_mqtt_buff_mgr.write_index  = write_index;
+    }
     HAL_MutexUnlock(g_at_mqtt_buff_mgr.buffer_mutex);
 
     return 0;
@@ -837,32 +962,25 @@ int mal_mc_data_copy_from_buf(char *topic, char *message)
         return -1;
     }
 
-    HAL_MutexLock(&g_at_mqtt_buff_mgr.buffer_mutex);
+    HAL_MutexLock(g_at_mqtt_buff_mgr.buffer_mutex);
     read_index = g_at_mqtt_buff_mgr.read_index;
 
     if (g_at_mqtt_buff_mgr.valid_flag[read_index] == 0) {
-        HAL_MutexUnlock(&g_at_mqtt_buff_mgr.buffer_mutex);
+        HAL_MutexUnlock(g_at_mqtt_buff_mgr.buffer_mutex);
         return -1;
     }
 
     copy_ptr = g_at_mqtt_buff_mgr.topic[read_index];
-
-    while (*copy_ptr) {
-        *topic++ = *copy_ptr++;
-    }
-
+    memcpy(topic, copy_ptr, strlen(copy_ptr));
     copy_ptr = g_at_mqtt_buff_mgr.msg_data[read_index];
-
-    while (*copy_ptr) {
-        *message++ = *copy_ptr++;
-    }
+    memcpy(message, copy_ptr, strlen(copy_ptr));
 
     memset(g_at_mqtt_buff_mgr.topic[read_index], 0, MAL_MC_MAX_TOPIC_LEN);
     memset(g_at_mqtt_buff_mgr.msg_data[read_index], 0, MAL_MC_MAX_MSG_LEN);
     g_at_mqtt_buff_mgr.valid_flag[read_index] = 0;
     read_index++;
 
-    if (read_index >= MAL_MC_MAX_BUFFER_NUM) {
+    if (read_index >= g_at_mqtt_buff_mgr.buffer_num) {
 
         read_index = 0;
 
@@ -870,309 +988,10 @@ int mal_mc_data_copy_from_buf(char *topic, char *message)
 
     g_at_mqtt_buff_mgr.read_index = read_index;
 
-    HAL_MutexUnlock(&g_at_mqtt_buff_mgr.buffer_mutex);
+    HAL_MutexUnlock(g_at_mqtt_buff_mgr.buffer_mutex);
 
     return 0;
 
-}
-
-// aos will implement this function
-#if defined(BUILD_AOS)
-extern void aos_get_version_hex(unsigned char version[VERSION_NUM_SIZE]);
-#else
-void aos_get_version_hex(unsigned char version[VERSION_NUM_SIZE])
-{
-    const char *p_version = LINKKIT_VERSION;
-    int i = 0, j = 0;
-    unsigned char res = 0;
-
-    for (j = 0; j < 3; j++) {
-        for (res = 0; p_version[i] <= '9' && p_version[i] >= '0'; i++) {
-            res = res * 10 + p_version[i] - '0';
-        }
-        version[j] = res;
-        i++;
-    }
-    version[3] = 0x00;
-}
-#endif
-
-// aos will implement this function
-#if defined(BUILD_AOS)
-extern void aos_get_mac_hex(unsigned char mac[MAC_ADDRESS_SIZE]);
-#else
-void aos_get_mac_hex(unsigned char mac[MAC_ADDRESS_SIZE])
-{
-    memcpy(mac, "\x01\x02\x03\x04\x05\x06\x07\x08", MAC_ADDRESS_SIZE);
-}
-#endif
-
-// aos will implement this function
-#if defined(BUILD_AOS)
-extern void aos_get_chip_code(unsigned char chip_code[CHIP_CODE_SIZE]);
-#else
-void aos_get_chip_code(unsigned char chip_code[CHIP_CODE_SIZE])
-{
-    memcpy(chip_code, "\x01\x02\x03\x04", CHIP_CODE_SIZE);
-}
-#endif
-/* Report AOS Version */
-const char *MAL_DEVICE_INFO_UPDATE_FMT = "{\"id\":\"2\",\"version\":\"1.0\",\"params\":["
-        "{\"attrKey\":\"SYS_ALIOS_ACTIVATION\",\"attrValue\":\"%s\",\"domain\":\"SYSTEM\"},"
-                                    "{\"attrKey\":\"SYS_LP_SDK_VERSION\",\"attrValue\":\"%s\",\"domain\":\"SYSTEM\"}"
-        "],\"method\":\"thing.deviceinfo.update\"}";
-static int mal_mc_report_devinfo(iotx_mc_client_t *pclient)
-{
-    int ret = 0;
-    int i;
-    char mac[MAC_ADDRESS_SIZE] = {0};
-    char version[VERSION_NUM_SIZE] = {0};
-    char random_num[RANDOM_NUM_SIZE];
-    char chip_code[CHIP_CODE_SIZE] = {0};
-    char output[AOS_ACTIVE_INFO_LEN] = {0};
-    char topic_name[IOTX_URI_MAX_LEN + 1] = {0};
-    char *msg = NULL;
-    int  msg_len = 0;
-    iotx_mqtt_topic_info_t topic_info;
-    char product_key[PRODUCT_KEY_LEN + 1] = {0};
-    char device_name[DEVICE_NAME_LEN + 1] = {0};
-
-    mal_debug("devinfo report in MQTT");
-
-    // Get AOS kernel version: AOS-R-1.3.0, transform to hex format
-    aos_get_version_hex((unsigned char *)version);
-
-    // Get Mac address
-    aos_get_mac_hex((unsigned char *)mac);
-
-    mac[6] = ACTIVE_SINGLE_GW;
-#ifdef BUILD_AOS
-    mac[7] = ACTIVE_LINKKIT_AOS;
-#else
-    mac[7] = ACTIVE_LINKKIT_ONLY;
-#endif
-    // Get Random
-    HAL_Srandom(HAL_UptimeMs());
-    for (i = 0; i < 4; i ++) {
-        random_num[i] = (char)HAL_Random(0xFF);
-    }
-    aos_get_chip_code((unsigned char *)chip_code);
-    /*
-    input: version 4byte + random 4 byte + mac 4byte + chip_code 4byte
-    output: output_buffer store the version info process. length at least OUTPUT_SPACE_SIZE
-    return: 0 success, 1 failed
-    */
-    // Get aos active info
-    ret = aos_get_version_info((unsigned char *)version, (unsigned char *)random_num, (unsigned char *)mac,
-                               (unsigned char *)chip_code, (unsigned char *)output, AOS_ACTIVE_INFO_LEN);
-    if (ret) {
-        mal_err("aos_get_version_info failed");
-        return FAIL_RETURN;
-    }
-    mal_debug("get aos avtive info: %s", output);
-
-    HAL_GetProductKey(product_key);
-    HAL_GetDeviceName(device_name);
-
-    /* linkkit version topic name */
-    ret = HAL_Snprintf(topic_name,
-                       IOTX_URI_MAX_LEN,
-                       "/sys/%s/%s/thing/deviceinfo/update",
-                       product_key,
-                       device_name);
-    if (ret <= 0) {
-        mal_err("topic generate err");
-        return FAIL_RETURN;
-    }
-    mal_debug("devinfo report topic: %s", topic_name);
-
-    msg_len = strlen(MAL_DEVICE_INFO_UPDATE_FMT) + strlen(LINKKIT_VERSION) + AOS_ACTIVE_INFO_LEN+1;
-    msg = (char *)mal_malloc(msg_len);
-    if (msg == NULL) {
-        mal_err("malloc err");
-        return FAIL_RETURN;
-    }
-    memset(msg, 0, msg_len);
-    /* generate linkkit version json data */
-    ret = HAL_Snprintf(msg,
-                       msg_len,
-                       MAL_DEVICE_INFO_UPDATE_FMT,
-                       output,
-                       LINKKIT_VERSION
-                      );
-    if (ret <= 0) {
-        mal_err("topic msg generate err");
-        mal_free(msg);
-        return FAIL_RETURN;
-    }
-    mal_debug("devinfo report data: %s", msg);
-
-    topic_info.qos = IOTX_MQTT_QOS1;
-    topic_info.payload = (void *)msg;
-    topic_info.payload_len = strlen(msg);
-    topic_info.retain = 0;
-    topic_info.dup = 0;
-
-    // publish message
-    ret = mal_mc_publish(pclient, topic_name, &topic_info);
-    mal_free(msg);
-    if (ret < 0) {
-        mal_err("publish failed");
-        return FAIL_RETURN;
-    }
-    mal_debug("devinfo report succeed");
-
-    return SUCCESS_RETURN;
-}
-
-/* report Firmware version */
-static int mal_mc_report_firmware_version(iotx_mc_client_t *pclient)
-{
-#if defined(BUILD_AOS)
-    return SUCCESS_RETURN;
-#else
-    int ret;
-    char topic_name[IOTX_URI_MAX_LEN + 1] = {0};
-    char msg[FIRMWARE_VERSION_MSG_LEN] = {0};
-    iotx_mqtt_topic_info_t topic_info;
-    char product_key[PRODUCT_KEY_LEN + 1] = {0};
-    char device_name[DEVICE_NAME_LEN + 1] = {0};
-    char version[FIRMWARE_VERSION_MAXLEN] = {0};
-
-    ret = HAL_GetFirmwareVesion(version);
-    if (ret <= 0) {
-        mal_err("firmware version does not implement");
-        return FAIL_RETURN;
-    }
-
-    mal_debug("firmware version report start in MQTT");
-
-    HAL_GetProductKey(product_key);
-    HAL_GetDeviceName(device_name);
-
-    /* firmware report topic name generate */
-    ret = HAL_Snprintf(topic_name,
-                       IOTX_URI_MAX_LEN,
-                       "/ota/device/inform/%s/%s",
-                       product_key,
-                       device_name
-                      );
-    if (ret <= 0) {
-        mal_err("firmware report topic generate err");
-        return FAIL_RETURN;
-    }
-    mal_debug("firmware report topic: %s", topic_name);
-
-    /* firmware report message json data generate */
-    ret = HAL_Snprintf(msg,
-                       FIRMWARE_VERSION_MSG_LEN,
-                       "{\"id\":\"%d\",\"params\":{\"version\":\"%s\"}}",
-                       3,
-                       version
-                      );
-    if (ret <= 0) {
-        mal_err("firmware report message json data generate err");
-        return FAIL_RETURN;
-    }
-    mal_debug("firmware report data: %s", msg);
-
-    topic_info.qos = IOTX_MQTT_QOS1;
-    topic_info.payload = (void *)msg;
-    topic_info.payload_len = strlen(msg);
-    topic_info.retain = 0;
-    topic_info.dup = 0;
-
-    // publish message
-    ret = mal_mc_publish(pclient, topic_name, &topic_info);
-    if (ret < 0) {
-        mal_err("publish failed");
-        return FAIL_RETURN;
-    }
-
-    mal_debug("firmware version report finished, mal_mc_publish() = %d", ret);
-    return SUCCESS_RETURN;
-#endif
-}
-
-/* report ModuleID */
-static int mal_mc_report_mid(iotx_mc_client_t *pclient)
-{
-    int                         ret;
-    char                        topic_name[IOTX_URI_MAX_LEN + 1];
-    iotx_mqtt_topic_info_t      topic_info;
-    char                        requestId[MIDREPORT_REQID_LEN + 1] = {0};
-    char product_key[PRODUCT_KEY_LEN + 1] = {0};
-    char device_name[DEVICE_NAME_LEN + 1] = {0};
-    char                        pid[PID_STRLEN_MAX + 1] = {0};
-    char                        mid[MID_STRLEN_MAX + 1] = {0};
-
-    memset(pid, 0, sizeof(pid));
-    memset(mid, 0, sizeof(mid));
-
-    if (0 == HAL_GetPartnerID(pid)) {
-        mal_debug("PartnerID is Null");
-        return SUCCESS_RETURN;
-    }
-    if (0 == HAL_GetModuleID(mid)) {
-        mal_debug("ModuleID is Null");
-        return SUCCESS_RETURN;
-    }
-
-    mal_debug("MID Report: started in MQTT");
-
-    HAL_GetProductKey(product_key);
-    HAL_GetDeviceName(device_name);
-
-    iotx_midreport_reqid(requestId,
-                         product_key,
-                         device_name);
-    /* 1,generate json data */
-    char *msg = mal_malloc(MIDREPORT_PAYLOAD_LEN);
-    if (NULL == msg) {
-        mal_err("allocate mem failed");
-        return FAIL_RETURN;
-    }
-
-    iotx_midreport_payload(msg,
-                           requestId,
-                           mid,
-                           pid);
-
-    mal_debug("MID Report: json data = '%s'", msg);
-
-    memset(&topic_info, 0, sizeof(iotx_mqtt_topic_info_t));
-
-    topic_info.qos = IOTX_MQTT_QOS0;
-    topic_info.payload = (void *)msg;
-    topic_info.payload_len = strlen(msg);
-    topic_info.retain = 0;
-    topic_info.dup = 0;
-
-    /* 2,generate topic name */
-    ret = iotx_midreport_topic(topic_name,
-                               "",
-                               product_key,
-                               device_name);
-
-    mal_debug("MID Report: topic name = '%s'", topic_name);
-
-    if (ret < 0) {
-        mal_err("generate topic name of info failed");
-        mal_free(msg);
-        return FAIL_RETURN;
-    }
-
-    ret = MAL_MQTT_Publish(pclient, topic_name, &topic_info);
-    if (ret < 0) {
-        mal_err("publish failed");
-        mal_free(msg);
-        return FAIL_RETURN;
-    }
-
-    mal_free(msg);
-
-    mal_debug("MID Report: finished, IOT_MQTT_Publish() = %d", ret);
-    return SUCCESS_RETURN;
 }
 
 static struct list_head g_mqtt_sub_list = LIST_HEAD_INIT(g_mqtt_sub_list);
@@ -1225,7 +1044,9 @@ void *MAL_MQTT_Construct(iotx_mqtt_param_t *pInitParams)
     }
 
 #if 1
-    err = mal_mc_report_mid(pclient);
+    iotx_set_report_func(MAL_MQTT_Publish_Simple);
+
+    err = iotx_report_mid(pclient);
     if (SUCCESS_RETURN != err) {
         mal_mc_release(pclient);
         mal_free(pclient);
@@ -1233,14 +1054,14 @@ void *MAL_MQTT_Construct(iotx_mqtt_param_t *pInitParams)
     }
 
     /* report device info */
-    err = mal_mc_report_devinfo(pclient);
+    err = iotx_report_devinfo(pclient);
     if (SUCCESS_RETURN != err) {
         mal_mc_release(pclient);
         mal_free(pclient);
         return NULL;
     }
 
-    err = mal_mc_report_firmware_version(pclient);
+    err = iotx_report_firmware_version(pclient);
     if (SUCCESS_RETURN != err) {
         mal_mc_release(pclient);
         mal_free(pclient);
@@ -1292,7 +1113,7 @@ int MAL_MQTT_Yield(void *handle, int timeout_ms)
     do {
         if (SUCCESS_RETURN != rc) {
             unsigned int left_t = iotx_time_left(&time);
-            mal_info("error occur ");
+            /*mal_info("error occur or no data");*/
             if (left_t < 20) {
                 HAL_SleepMs(left_t);
             } else {
@@ -1303,8 +1124,6 @@ int MAL_MQTT_Yield(void *handle, int timeout_ms)
 
         /* acquire package in cycle, such as PUBLISH */
         rc = mal_mc_cycle(pClient, &time);
-        if (SUCCESS_RETURN == rc) {
-        }
         _yield_unlock(pClient);
     } while (!utils_time_is_expired(&time));
 
@@ -1380,4 +1199,3 @@ int MAL_MQTT_Publish(void *handle, const char *topic_name, iotx_mqtt_topic_info_
 
     return mal_mc_publish(client, topic_name, topic_msg);
 }
-

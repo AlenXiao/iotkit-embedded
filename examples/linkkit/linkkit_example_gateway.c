@@ -31,13 +31,14 @@
 
 #define USER_EXAMPLE_YIELD_TIMEOUT_MS (200)
 
-#define EXAMPLE_TRACE(...)                               \
-    do {                                                     \
-        HAL_Printf("\033[1;32;40m%s.%d: ", __func__, __LINE__);  \
-        HAL_Printf(__VA_ARGS__);                                 \
-        HAL_Printf("\033[0m\r\n");                                   \
+#define EXAMPLE_TRACE(...) \
+    do { \
+        HAL_Printf("\033[1;32;40m%s.%d: ", __func__, __LINE__); \
+        HAL_Printf(__VA_ARGS__); \
+        HAL_Printf("\033[0m\r\n"); \
     } while (0)
 
+#define EXAMPLE_SUBDEV_ADD_NUM          3
 #define EXAMPLE_SUBDEV_MAX_NUM          20
 const iotx_linkkit_dev_meta_info_t subdevArr[EXAMPLE_SUBDEV_MAX_NUM] = {
     {
@@ -163,14 +164,17 @@ const iotx_linkkit_dev_meta_info_t subdevArr[EXAMPLE_SUBDEV_MAX_NUM] = {
 };
 
 typedef struct {
+    int auto_add_subdev;
     int master_devid;
     int cloud_connected;
     int master_initialized;
     int subdev_index;
+    int permit_join;
+    void *g_user_dispatch_thread;
+    int g_user_dispatch_thread_running;
 } user_example_ctx_t;
 
 static user_example_ctx_t g_user_example_ctx;
-static void *g_user_dispatch_thread;
 
 void *example_malloc(size_t size)
 {
@@ -181,8 +185,6 @@ void example_free(void *ptr)
 {
     HAL_Free(ptr);
 }
-
-int example_add_subdev(iotx_linkkit_dev_meta_info_t *meta_info);
 
 static user_example_ctx_t *user_example_get_ctx(void)
 {
@@ -321,7 +323,7 @@ void set_iotx_info()
     HAL_SetDeviceSecret(DEVICE_SECRET);
 }
 
-int example_add_subdev(iotx_linkkit_dev_meta_info_t *meta_info)
+static int example_add_subdev(iotx_linkkit_dev_meta_info_t *meta_info)
 {
     int res = 0, devid = -1;
     devid = IOT_Linkkit_Open(IOTX_LINKKIT_DEV_TYPE_SLAVE, meta_info);
@@ -347,33 +349,65 @@ int example_add_subdev(iotx_linkkit_dev_meta_info_t *meta_info)
     return res;
 }
 
+int user_permit_join_event_handler(const char *product_key, const int time)
+{
+    user_example_ctx_t *user_example_ctx = user_example_get_ctx();
+
+    EXAMPLE_TRACE("Product Key: %s, Time: %d", product_key, time);
+
+    user_example_ctx->permit_join = 1;
+
+    return 0;
+}
+
 void *user_dispatch_yield(void *args)
 {
-    while (1) {
+    user_example_ctx_t *user_example_ctx = user_example_get_ctx();
+
+    while (user_example_ctx->g_user_dispatch_thread_running) {
         IOT_Linkkit_Yield(USER_EXAMPLE_YIELD_TIMEOUT_MS);
     }
 
     return NULL;
 }
 
+static int max_running_seconds = 0;
 int linkkit_main(void *paras)
 {
-#if !defined(WIFI_PROVISION_ENABLED) || !defined(BUILD_AOS)
-    set_iotx_info();
-#endif
     int res = 0;
-    uint64_t time_prev_sec = 0, time_now_sec = 0;
+    uint64_t time_prev_sec = 0, time_now_sec = 0, time_begin_sec = 0;
     user_example_ctx_t *user_example_ctx = user_example_get_ctx();
     iotx_linkkit_dev_meta_info_t master_meta_info;
 
     memset(user_example_ctx, 0, sizeof(user_example_ctx_t));
+
+#if defined(__UBUNTU_SDK_DEMO__)
+    int                             argc = ((app_main_paras_t *)paras)->argc;
+    char                          **argv = ((app_main_paras_t *)paras)->argv;
+
+    if (argc > 1) {
+        int tmp = atoi(argv[1]);
+
+        if (tmp >= 60) {
+            max_running_seconds = tmp;
+            EXAMPLE_TRACE("set [max_running_seconds] = %d seconds\n", max_running_seconds);
+        }
+    }
+
+    if (argc > 2) {
+        if (strlen("auto") == strlen(argv[2]) &&
+            memcmp("auto", argv[2], strlen(argv[2])) == 0) {
+            user_example_ctx->auto_add_subdev = 1;
+        }
+    }
+#endif
+
+#if !defined(WIFI_PROVISION_ENABLED) || !defined(BUILD_AOS)
+    set_iotx_info();
+#endif
+
     user_example_ctx->subdev_index = -1;
 
-    /* Init cJSON Hooks */
-    cJSON_Hooks cjson_hooks = {example_malloc, example_free};
-    cJSON_InitHooks(&cjson_hooks);
-
-    IOT_OpenLog("iot_linkkit");
     IOT_SetLogLevel(IOT_LOG_DEBUG);
 
     /* Register Callback */
@@ -383,6 +417,7 @@ int linkkit_main(void *paras)
     IOT_RegisterCallback(ITE_REPORT_REPLY, user_report_reply_event_handler);
     IOT_RegisterCallback(ITE_TIMESTAMP_REPLY, user_timestamp_reply_event_handler);
     IOT_RegisterCallback(ITE_INITIALIZE_COMPLETED, user_initialized);
+    IOT_RegisterCallback(ITE_PERMIT_JOIN, user_permit_join_event_handler);
 
     memset(&master_meta_info, 0, sizeof(iotx_linkkit_dev_meta_info_t));
     memcpy(master_meta_info.product_key, PRODUCT_KEY, strlen(PRODUCT_KEY));
@@ -416,22 +451,31 @@ int linkkit_main(void *paras)
         return -1;
     }
 
-    res = HAL_ThreadCreate(&g_user_dispatch_thread, user_dispatch_yield, NULL, NULL, NULL);
+    user_example_ctx->g_user_dispatch_thread_running = 1;
+    res = HAL_ThreadCreate(&user_example_ctx->g_user_dispatch_thread, user_dispatch_yield, NULL, NULL, NULL);
     if (res < 0) {
         EXAMPLE_TRACE("HAL_ThreadCreate Failed\n");
         IOT_Linkkit_Close(user_example_ctx->master_devid);
         return -1;
     }
 
+    time_begin_sec = user_update_sec();
     while (1) {
+        HAL_SleepMs(200);
+
         time_now_sec = user_update_sec();
         if (time_prev_sec == time_now_sec) {
             continue;
         }
+        if (max_running_seconds && (time_now_sec - time_begin_sec > max_running_seconds)) {
+            EXAMPLE_TRACE("Example Run for Over %d Seconds, Break Loop!\n", max_running_seconds);
+            break;
+        }
 
         /* Add subdev */
-        if (user_example_ctx->master_initialized && user_example_ctx->subdev_index >= 0) {
-            if (user_example_ctx->subdev_index < EXAMPLE_SUBDEV_MAX_NUM) {
+        if (user_example_ctx->master_initialized && user_example_ctx->subdev_index >= 0 &&
+            (user_example_ctx->auto_add_subdev == 1 || user_example_ctx->permit_join != 0)) {
+            if (user_example_ctx->subdev_index < EXAMPLE_SUBDEV_ADD_NUM) {
                 /* Add next subdev */
                 if (example_add_subdev((iotx_linkkit_dev_meta_info_t *)&subdevArr[user_example_ctx->subdev_index]) == SUCCESS_RETURN) {
                     EXAMPLE_TRACE("subdev %s add succeed", subdevArr[user_example_ctx->subdev_index].device_name);
@@ -439,6 +483,7 @@ int linkkit_main(void *paras)
                     EXAMPLE_TRACE("subdev %s add failed", subdevArr[user_example_ctx->subdev_index].device_name);
                 }
                 user_example_ctx->subdev_index++;
+                user_example_ctx->permit_join = 0;
             }
         }
 
@@ -460,7 +505,12 @@ int linkkit_main(void *paras)
         time_prev_sec = time_now_sec;
     }
 
+    user_example_ctx->g_user_dispatch_thread_running = 0;
     IOT_Linkkit_Close(user_example_ctx->master_devid);
+    HAL_ThreadDelete(user_example_ctx->g_user_dispatch_thread);
+
+    IOT_DumpMemoryStats(IOT_LOG_DEBUG);
+    IOT_SetLogLevel(IOT_LOG_NONE);
     return 0;
 }
 #endif

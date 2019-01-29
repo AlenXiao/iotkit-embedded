@@ -7,6 +7,7 @@
 
 
 #include "stdio.h"
+#include "iotx_system.h"
 #include "Cloud_CoAPExport.h"
 #include "Cloud_CoAPSerialize.h"
 #include "Cloud_CoAPDeserialize.h"
@@ -43,7 +44,8 @@
 #define COAP_ACK_RANDOM_FACTOR  1
 #define COAP_MAX_TRANSMISSION_SPAN   10
 
-int Cloud_CoAPStrOption_add(Cloud_CoAPMessage *message, unsigned short optnum, unsigned char *data, unsigned short datalen)
+int Cloud_CoAPStrOption_add(Cloud_CoAPMessage *message, unsigned short optnum, unsigned char *data,
+                            unsigned short datalen)
 {
     unsigned char *ptr = NULL;
     if (COAP_MSG_MAX_OPTION_NUM <= message->optnum) {
@@ -145,7 +147,7 @@ int Cloud_CoAPMessageCode_set(Cloud_CoAPMessage *message, Cloud_CoAPMessageCode 
 }
 
 int Cloud_CoAPMessageToken_set(Cloud_CoAPMessage *message, unsigned char *token,
-                         unsigned char tokenlen)
+                               unsigned char tokenlen)
 {
     if (NULL == message || NULL == token) {
         return COAP_ERROR_NULL;
@@ -169,7 +171,7 @@ int Cloud_CoAPMessageUserData_set(Cloud_CoAPMessage *message, void *userdata)
 }
 
 int Cloud_CoAPMessagePayload_set(Cloud_CoAPMessage *message, unsigned char *payload,
-                           unsigned short payloadlen)
+                                 unsigned short payloadlen)
 {
     if (NULL == message || (0 < payloadlen && NULL == payload)) {
         return COAP_ERROR_NULL;
@@ -297,7 +299,7 @@ int Cloud_CoAPMessage_send(Cloud_CoAPContext *context, Cloud_CoAPMessage *messag
             COAP_DEBUG("The message doesn't need to be retransmitted");
         }
     } else {
-        COAP_ERR("CoAP transoprt write failed, return %d", ret);
+        COAP_ERR("CoAP transport write failed, return %d", ret);
     }
 
     return ret;
@@ -340,6 +342,9 @@ static int Cloud_CoAPRespMessage_handle(Cloud_CoAPContext *context, Cloud_CoAPMe
             && 0 == memcmp(node->token, message->token, message->header.tokenlen)) {
 
             COAP_DEBUG("Find the node by token");
+            COAP_INFO("Downstream Payload:");
+            iotx_facility_json_print((const char *)message->payload, LOG_INFO_LEVEL, '<');
+
             message->user  = node->user;
             if (COAP_MSG_CODE_400_BAD_REQUEST <= message->header.code) {
                 /* TODO:i */
@@ -366,8 +371,8 @@ static int Cloud_CoAPRespMessage_handle(Cloud_CoAPContext *context, Cloud_CoAPMe
 }
 
 static void Cloud_CoAPMessage_handle(Cloud_CoAPContext *context,
-                               unsigned char     *buf,
-                               unsigned short      datalen)
+                                     unsigned char     *buf,
+                                     unsigned short      datalen)
 {
     int    ret  = COAP_SUCCESS;
     Cloud_CoAPMessage     message;
@@ -410,15 +415,14 @@ int Cloud_CoAPMessage_recv(Cloud_CoAPContext *context, unsigned int timeout, int
 
     while (1) {
         len = Cloud_CoAPNetwork_read(&context->network, context->recvbuf,
-                               COAP_MSG_MAX_PDU_LEN, timeout);
+                                     COAP_MSG_MAX_PDU_LEN, timeout);
         if (len > 0) {
-            if(0 == readcount){
+            if (0 == readcount) {
                 Cloud_CoAPMessage_handle(context, context->recvbuf, len);
-            }
-            else{
+            } else {
                 count--;
                 Cloud_CoAPMessage_handle(context, context->recvbuf, len);
-                if(0 == count){
+                if (0 == count) {
                     return len;
                 }
             }
@@ -466,8 +470,7 @@ int Cloud_CoAPMessage_cycle(Cloud_CoAPContext *context)
                     coap_free(node->message);
                     coap_free(node);
                 }
-            }
-             else {
+            } else {
                 node->timeout--;
             }
         }

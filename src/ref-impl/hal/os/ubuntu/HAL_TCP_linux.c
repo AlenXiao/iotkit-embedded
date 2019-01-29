@@ -56,7 +56,7 @@ uintptr_t HAL_TCP_Establish(const char *host, uint16_t port)
 
     memset(&hints, 0, sizeof(hints));
 
-    hal_info("establish tcp connection with server(host=%s port=%u)", host, port);
+    hal_info("establish tcp connection with server(host='%s', port=[%u])", host, port);
 
     hints.ai_family = AF_INET; /* only IPv4 */
     hints.ai_socktype = SOCK_STREAM;
@@ -64,21 +64,21 @@ uintptr_t HAL_TCP_Establish(const char *host, uint16_t port)
     sprintf(service, "%u", port);
 
     if ((rc = getaddrinfo(host, service, &hints, &addrInfoList)) != 0) {
-        hal_err("getaddrinfo error");
-        return 0;
+        hal_err("getaddrinfo error(%d), host = '%s', port = [%d]", rc, host, port);
+        return -1;
     }
 
     for (cur = addrInfoList; cur != NULL; cur = cur->ai_next) {
         if (cur->ai_family != AF_INET) {
             hal_err("socket type error");
-            rc = 0;
+            rc = -1;
             continue;
         }
 
         fd = socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
         if (fd < 0) {
             hal_err("create socket error");
-            rc = 0;
+            rc = -1;
             continue;
         }
 
@@ -89,10 +89,10 @@ uintptr_t HAL_TCP_Establish(const char *host, uint16_t port)
 
         close(fd);
         hal_err("connect error");
-        rc = 0;
+        rc = -1;
     }
 
-    if (0 == rc) {
+    if (-1 == rc) {
         hal_err("fail to establish tcp");
     } else {
         hal_info("success to establish tcp, fd=%d", rc);
@@ -134,6 +134,7 @@ int32_t HAL_TCP_Write(uintptr_t fd, const char *buf, uint32_t len, uint32_t time
     t_end = _linux_get_time_ms() + timeout_ms;
     len_sent = 0;
     ret = 1; /* send one time if timeout_ms is value 0 */
+    int net_err = 0;
 
     do {
         t_left = _linux_time_left(t_end, _linux_get_time_ms());
@@ -164,7 +165,8 @@ int32_t HAL_TCP_Write(uintptr_t fd, const char *buf, uint32_t len, uint32_t time
                     continue;
                 }
 
-                hal_err("select-write fail");
+                hal_err("select-write fail, ret = select() = %d", ret);
+                net_err = 1;
                 break;
             }
         }
@@ -181,13 +183,18 @@ int32_t HAL_TCP_Write(uintptr_t fd, const char *buf, uint32_t len, uint32_t time
                     continue;
                 }
 
-                hal_err("send fail");
+                hal_err("send fail, ret = send() = %d", ret);
+                net_err = 1;
                 break;
             }
         }
-    } while ((len_sent < len) && (_linux_time_left(t_end, _linux_get_time_ms()) > 0));
+    } while (!net_err && (len_sent < len) && (_linux_time_left(t_end, _linux_get_time_ms()) > 0));
 
-    return len_sent;
+    if (net_err) {
+        return -1;
+    } else {
+        return len_sent;
+    }
 }
 
 

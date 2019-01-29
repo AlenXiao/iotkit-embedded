@@ -2,8 +2,6 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #include <stdlib.h>
 #include "aws_lib.h"
 #include "zconfig_lib.h"
@@ -11,6 +9,7 @@
 #include "awss_enrollee.h"
 #include "awss_packet.h"
 #include "awss_notify.h"
+#include "awss_statis.h"
 #include "awss_event.h"
 #include "awss_main.h"
 #include "awss_cmp.h"
@@ -23,7 +22,7 @@ extern "C"
 {
 #endif
 
-char awss_finished = 0;
+char awss_finished = 2;
 char awss_stop_connecting = 0;
 
 int __awss_start(void)
@@ -53,7 +52,7 @@ int __awss_start(void)
     aws_destroy();
 
     do {
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
         char awss_notify_needed = 1;
         int adha = 0;
 #endif
@@ -61,7 +60,7 @@ int __awss_start(void)
         if (awss_stop_connecting || strlen(ssid) == 0) {
             break;
         }
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
         if ((adha = strcmp(ssid, ADHA_SSID)) == 0 || strcmp(ssid, DEFAULT_SSID) == 0) {
             awss_notify_needed = 0;
             awss_event_post(adha != 0 ? AWSS_CONNECT_AHA : AWSS_CONNECT_ADHA);
@@ -69,6 +68,7 @@ int __awss_start(void)
 #endif
         {
             awss_event_post(AWSS_CONNECT_ROUTER);
+            AWSS_UPDATE_STATIS(AWSS_STATIS_CONN_ROUTER_IDX, AWSS_STATIS_TYPE_TIME_START);
         }
 
         ret = os_awss_connect_ap(WLAN_CONNECTION_TIMEOUT_MS, ssid, passwd,
@@ -77,22 +77,25 @@ int __awss_start(void)
             awss_debug("awss connect ssid:%s success", ssid);
             awss_event_post(AWSS_GOT_IP);
 
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
             if (awss_notify_needed == 0) {
                 awss_dev_bind_notify_stop();
                 awss_suc_notify_stop();
-                awss_cmp_local_init();
+                awss_cmp_local_init(adha == 0 ? AWSS_LC_INIT_ROUTER : AWSS_LC_INIT_PAP);
                 awss_devinfo_notify();
+                if (adha == 0)
+                    AWSS_UPDATE_STATIS(AWSS_STATIS_ROUTE_IDX, AWSS_STATIS_TYPE_TIME_SUC);
                 awss_event_post(AWSS_SETUP_NOTIFY);
             } else
 #endif
             {
+                AWSS_UPDATE_STATIS(AWSS_STATIS_CONN_ROUTER_IDX, AWSS_STATIS_TYPE_TIME_SUC);
                 awss_devinfo_notify_stop();
                 produce_random(aes_random, sizeof(aes_random));
             }
         } else {
             awss_debug("awss connect ssid:%s fail", ssid);
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
             if (awss_notify_needed == 0) {
                 awss_event_post(adha != 0 ? AWSS_CONNECT_AHA_FAIL : AWSS_CONNECT_ADHA_FAIL);
             } else
@@ -103,8 +106,8 @@ int __awss_start(void)
         }
     } while (0);
 
+    AWSS_DISP_STATIS();
     awss_finished = 1;
-    /* never reach here */
     return 0;
 }
 
@@ -112,19 +115,25 @@ int __awss_stop(void)
 {
     awss_stop_connecting = 1;
     aws_destroy();
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORt_AHA)
+#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
     awss_devinfo_notify_stop();
 #endif
     awss_suc_notify_stop();
 #ifndef AWSS_DISABLE_REGISTRAR
     awss_registrar_deinit();
 #endif
+    if (awss_finished < 2) {
+        awss_cmp_local_deinit(1);
+    } else {
+        awss_cmp_local_deinit(0);
+    }
 
     while (1) {
         if (awss_finished) break;
         os_msleep(300);
     }
     aws_release_mutex();
+    awss_finished = 2;
     return 0;
 }
 

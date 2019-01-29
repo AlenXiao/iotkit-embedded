@@ -4,6 +4,10 @@
 
 #include "sdk-impl_internal.h"
 
+#if defined(DEVICE_MODEL_ENABLED) && !defined(DEPRECATED_LINKKIT)
+    #include "iotx_dm.h"
+#endif
+
 #define KV_KEY_DEVICE_SECRET            "DyncRegDeviceSecret"
 
 static sdk_impl_ctx_t g_sdk_impl_ctx = {0};
@@ -25,6 +29,7 @@ void IOT_SetLogLevel(IOT_LogLevel level)
     }
 
     LITE_set_loglevel(lvl);
+    HAL_Printf("[prt] log level set as: [ %d ]\r\n", lvl);
 }
 
 void IOT_DumpMemoryStats(IOT_LogLevel level)
@@ -39,7 +44,6 @@ void IOT_DumpMemoryStats(IOT_LogLevel level)
     LITE_dump_malloc_free_stats(lvl);
 }
 
-#if defined(MQTT_COMM_ENABLED) || defined(MAL_ENABLED)
 int IOT_SetupConnInfo(const char *product_key,
                       const char *device_name,
                       const char *device_secret,
@@ -51,13 +55,12 @@ int IOT_SetupConnInfo(const char *product_key,
     int                 device_secret_len = DEVICE_SECRET_MAXLEN;
     sdk_impl_ctx_t     *ctx = sdk_impl_get_ctx();
 
-    if (!info_ptr) {
-        sdk_err("Invalid argument, info_ptr = %p", info_ptr);
-        return -1;
-    }
-
     STRING_PTR_SANITY_CHECK(product_key, -1);
     STRING_PTR_SANITY_CHECK(device_name, -1);
+
+    HAL_SetProductKey((char *)product_key);
+    HAL_SetDeviceName((char *)device_name);
+    HAL_SetDeviceSecret((char *)device_secret);
 
     /* Dynamic Register Device If Need */
     if (ctx->dynamic_register == 0) {
@@ -106,24 +109,20 @@ int IOT_SetupConnInfo(const char *product_key,
         }
     }
 
-    iotx_device_info_init();
-    iotx_device_info_set(product_key, device_name, device_secret_actual);
+    //iotx_device_info_set(product_key, device_name, device_secret_actual);
 
-    if (0 == iotx_guider_auth_get()) {
-        rc = iotx_guider_authenticate();
+#if defined MQTT_COMM_ENABLED
+    if (NULL == info_ptr) {
+        return SUCCESS_RETURN;
     }
-    if (rc == 0) {
-        iotx_guider_auth_set(1);
-        *info_ptr = (void *)iotx_conn_info_get();
-    } else {
-        iotx_guider_auth_set(0);
-        *info_ptr = NULL;
+    *info_ptr = iotx_conn_info_reload();
+    if (*info_ptr == NULL) {
+        return -1;
     }
 
+#endif
     return rc;
 }
-
-#endif  /* #if defined(MQTT_COMM_ENABLED)   */
 
 int IOT_Ioctl(int option, void *data)
 {
@@ -176,15 +175,17 @@ int IOT_Ioctl(int option, void *data)
         }
         break;
 #if defined(DEVICE_MODEL_ENABLED) && !defined(DEPRECATED_LINKKIT)
-        case IOTX_IOCTL_RECV_PROP_REPLY: {
-            res = impl_linkkit_ioctl(0, IMPL_LINKKIT_IOCTL_SWITCH_PROPERTY_POST_REPLY, data);
-        }
-        break;
+#if !defined(DEVICE_MODEL_RAWDATA_SOLO)
         case IOTX_IOCTL_RECV_EVENT_REPLY:
-        case IOTX_IOCTL_SEND_PROP_REPLY: {
-            res = impl_linkkit_ioctl(0, IMPL_LINKKIT_IOCTL_SWITCH_EVENT_POST_REPLY, data);
+        case IOTX_IOCTL_RECV_PROP_REPLY: {
+            res = iotx_dm_set_opt(IMPL_LINKKIT_IOCTL_SWITCH_EVENT_POST_REPLY, data);
         }
         break;
+        case IOTX_IOCTL_SEND_PROP_SET_REPLY : {
+            res = iotx_dm_set_opt(IMPL_LINKKIT_IOCTL_SWITCH_PROPERTY_SET_REPLY, data);
+        }
+        break;
+#endif
         case IOTX_IOCTL_SET_SUBDEV_SIGN: {
             /* todo */
         }

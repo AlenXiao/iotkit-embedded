@@ -2,8 +2,6 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #ifndef _IOTX_DM_INTERNAL_H_
 #define _IOTX_DM_INTERNAL_H_
 
@@ -22,15 +20,10 @@
 #include "iot_import.h"
 #include "iot_export.h"
 #include "iotx_utils.h"
-#include "lite-list.h"
-#include "lite-cjson.h"
-#include "utils_hmac.h"
-#include "utils_sha256.h"
-#include "utils_sysinfo.h"
 #include "iotx_system.h"
 
-#ifdef DEV_BIND_ENABLED
-    #include "awss.h"
+#if defined(OTA_ENABLED) && !defined(BUILD_AOS)
+    #include "iotx_ota.h"
 #endif
 
 /* CM Header File */
@@ -65,11 +58,17 @@
 
 #define DM_SUPPORT_MEMORY_MAGIC
 #ifdef DM_SUPPORT_MEMORY_MAGIC
-    #define DM_malloc(size) LITE_malloc(size, MEM_MAGIC, "DM")
+    #define DM_malloc(size) LITE_malloc(size, MEM_MAGIC, "dm")
 #else
     #define DM_malloc(size) LITE_malloc(size)
 #endif
 #define DM_free(ptr)   {LITE_free(ptr);ptr = NULL;}
+
+#if defined(COAP_COMM_ENABLED) && !defined(MQTT_COMM_ENABLED)
+    #define DM_URI_OFFSET 1
+#else
+    #define DM_URI_OFFSET 0
+#endif
 
 #if 1
     #define dm_log_emerg(...)     log_emerg("DM", __VA_ARGS__)
@@ -85,6 +84,22 @@
     #define dm_log_warning(...)
     #define dm_log_info(...)
     #define dm_log_debug(...)
+#endif
+
+#ifdef LOG_REPORT_TO_CLOUD
+#define LOG_POLL_SIZE (CONFIG_MQTT_TX_MAXLEN - 174)
+#define REPORT_LEN (LOG_POLL_SIZE - 110)
+#define OVERFLOW_LEN (LOG_POLL_SIZE - 10)
+
+typedef enum {
+    READY,
+    RUNNING,
+    DONE
+} REPORT_STATE;
+unsigned int add_tail();
+int reset_log_poll();
+int remove_log_poll();
+unsigned int push_log(const char *perform_data, int perform_data_size);
 #endif
 
 #endif

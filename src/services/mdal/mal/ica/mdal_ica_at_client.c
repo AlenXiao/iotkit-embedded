@@ -7,7 +7,10 @@
 #include <string.h>
 #include "mdal_ica_at_client.h"
 #include "mdal_mal_import.h"
-#include "iotx_log.h"
+#include "iotx_utils.h"
+
+#define MDAL_ICA_MALLOC(size) LITE_malloc(size, MEM_MAGIC, "mdal.ica")
+#define MDAL_ICA_FREE(ptr)    LITE_free(ptr)
 
 typedef enum {
     AT_MQTT_IDLE = 0,
@@ -444,7 +447,7 @@ static void at_ica_mqtt_client_rsp_callback(void *arg, char *rspinfo, int rsplen
     }
 
     if (rsplen > AT_MQTT_RSP_MAX_LEN) {
-        mdal_err("rsp len exceed max len");
+        mdal_err("rsp len(%d) exceed max len", rsplen);
         return;
     }
 
@@ -694,10 +697,8 @@ int at_ica_mqtt_client_unsubscribe(const char *topic,
 
 int at_ica_mqtt_client_publish(const char *topic, int qos, const char *message)
 {
-//    int     packet_id;
-//    int     status;
-    char    at_cmd[AT_MQTT_CMD_MAX_LEN];
-    char    msg_convert[AT_MQTT_CMD_MAX_LEN];
+    char    at_cmd[AT_MQTT_CMD_MAX_LEN] = {0};
+    char    msg_convert[AT_MQTT_CMD_MAX_LEN] = {0};
     char   *temp;
     if ((topic == NULL)||(message == NULL)) {
 
@@ -705,9 +706,6 @@ int at_ica_mqtt_client_publish(const char *topic, int qos, const char *message)
 
         return -1;
     }
-
-    memset(at_cmd, 0, AT_MQTT_CMD_MAX_LEN);
-    memset(msg_convert, 0, AT_MQTT_CMD_MAX_LEN);
 
     temp = msg_convert;
 
@@ -746,17 +744,19 @@ int at_ica_mqtt_client_state(void)
 
 int at_ica_mqtt_client_init(void)
 {
-    g_ica_rsp_buff = HAL_Malloc(AT_MQTT_RSP_MAX_LEN);
+    g_ica_rsp_buff = MDAL_ICA_MALLOC(AT_MQTT_RSP_MAX_LEN);
     if (NULL == g_ica_rsp_buff) {
+        mdal_err("at ica mqtt client malloc buff failed");
         return -1;
     }
 
     if (NULL == (g_sem_response = HAL_SemaphoreCreate())) {
         if (NULL != g_ica_rsp_buff) {
-            HAL_Free(g_ica_rsp_buff);
+            MDAL_ICA_FREE(g_ica_rsp_buff);
 
             g_ica_rsp_buff = NULL;
         }
+        mdal_err("at ica mqtt client create sem failed");
 
         return -1;
     }
@@ -765,19 +765,19 @@ int at_ica_mqtt_client_init(void)
 
     HAL_MDAL_MAL_ICA_Init();
 
-    HAL_MDAL_MAL_ICA_Oob(AT_ICA_MQTT_MQTTRCV,
+    HAL_MDAL_MAL_ICA_InputCb(AT_ICA_MQTT_MQTTRCV,
            AT_ICA_MQTT_POSTFIX,
            AT_MQTT_CMD_MAX_LEN,
            at_ica_mqtt_client_rsp_callback,
            NULL);
 
-    HAL_MDAL_MAL_ICA_Oob(AT_ICA_MQTT_MQTTERROR,
+    HAL_MDAL_MAL_ICA_InputCb(AT_ICA_MQTT_MQTTERROR,
            AT_ICA_MQTT_POSTFIX,
            AT_MQTT_CMD_MAX_LEN,
            at_ica_mqtt_client_rsp_callback,
            NULL);
 
-    HAL_MDAL_MAL_ICA_Oob(AT_ICA_MQTT_MQTTOK,
+    HAL_MDAL_MAL_ICA_InputCb(AT_ICA_MQTT_MQTTOK,
            AT_ICA_MQTT_POSTFIX,
            AT_MQTT_CMD_MAX_LEN,
            at_ica_mqtt_client_rsp_callback,
@@ -789,7 +789,7 @@ int at_ica_mqtt_client_init(void)
 int at_ica_mqtt_client_deinit(void)
 {
     if (NULL != g_ica_rsp_buff) {
-        HAL_Free(g_ica_rsp_buff);
+        MDAL_ICA_FREE(g_ica_rsp_buff);
         g_ica_rsp_buff = NULL;
     }
 

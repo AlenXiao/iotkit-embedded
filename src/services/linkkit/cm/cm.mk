@@ -1,8 +1,24 @@
 NAME := libiot_cm
 
-$(NAME)_SOURCES := ./iotx_cm.c \
-iotx_cm_mqtt.c \
+$(NAME)_MBINS_TYPE := kernel
+$(NAME)_VERSION := 2.3.0
+$(NAME)_SUMMARY :=
+
+$(NAME)_SOURCES := ./iotx_cm.c 
+
  
+ ifeq (y,$(FEATURE_COAP_COMM_ENABLED))
+$(NAME)_SOURCES += iotx_cm_coap.c 
+endif
+
+ ifeq (y,$(FEATURE_MQTT_COMM_ENABLED))
+$(NAME)_SOURCES += iotx_cm_mqtt.c  
+endif
+
+ifeq (y,$(FEATURE_MAL_ENABLED))
+$(NAME)_SOURCES += iotx_cm_mqtt.c  
+endif
+
 $(NAME)_COMPONENTS := middleware/linkkit/sdk-c/src/infra/utils \
 middleware/linkkit/sdk-c/src/infra/log \
 middleware/linkkit/sdk-c/src/infra/system \

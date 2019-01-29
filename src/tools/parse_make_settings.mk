@@ -1,7 +1,14 @@
 include $(CURDIR)/src/tools/internal_make_funcs.mk
 
-SWITCH_VARS := $(shell grep -o 'FEATURE_[_A-Z0-9]*' $(TOP_DIR)/Config.in $(TOP_DIR)/make.settings|cut -d: -f2|uniq)
-SWITCH_VARS := $(sort $(SWITCH_VARS))
+SWITCH_VARS := \
+$(shell grep '''config [_A-Z]*''' \
+    $(wildcard $(TOP_DIR)/*/*/*/Config.in) $(wildcard $(TOP_DIR)/*/*/Config.in) \
+        | cut -d: -f2 \
+        | grep -v menuconfig \
+        | grep -v SRCPATH \
+        | awk '{ print $$NF }' \
+)
+SWITCH_VARS := $(foreach V,$(sort $(SWITCH_VARS)),FEATURE_$(V))
 
 $(foreach v, \
     $(SWITCH_VARS), \
@@ -9,8 +16,20 @@ $(foreach v, \
         $(eval CFLAGS += -D$(subst FEATURE_,,$(v)))) \
 )
 
+ifeq (y,$(strip $(FEATURE_COAP_COMM_ENABLED)))
+    # CFLAGS += -DDM_MESSAGE_CACHE_DISABLED
+endif
+
+ifeq (y,$(strip $(FEATURE_DEVICE_MODEL_RAWDATA_SOLO)))
+    CFLAGS += -DDM_MESSAGE_CACHE_DISABLED
+endif
+
 ifeq (y,$(strip $(FEATURE_WIFI_PROVISION_ENABLED)))
     CFLAGS += -DAWSS_SUPPORT_APLIST
+
+    ifeq (y,$(strip $(FEATURE_AWSS_SUPPORT_DEV_AP)))
+        CFLAGS += -DAWSS_SUPPORT_DEV_AP
+    endif
 
     ifeq (y,$(strip $(FEATURE_AWSS_SUPPORT_SMARTCONFIG)))
         CFLAGS += -DAWSS_SUPPORT_SMARTCONFIG \
@@ -58,11 +77,6 @@ ifeq (y,$(strip $(FEATURE_OTA_ENABLED)))
     endif # MQTT
 endif # FEATURE_OTA_ENABLED
 
-ifeq (y,$(strip $(FEATURE_MAL_ENABLED)))
-    ifeq (n,$(strip $(FEATURE_MQTT_COMM_ENABLED)))
-        CFLAGS += -DMAL_ENABLED
-    endif
-endif #FEATURE_MAL_ENABLED
 include build-rules/settings.mk
 sinclude $(CONFIG_TPL)
 
@@ -70,4 +84,14 @@ SUBDIRS += src/ref-impl/hal
 SUBDIRS += examples
 SUBDIRS += tests
 SUBDIRS += src/ref-impl/tls
+
+ifeq (y,$(strip $(FEATURE_DEVICE_MODEL_ENABLED)))
+ifeq (y,$(strip $(FEATURE_DEPRECATED_LINKKIT)))
 SUBDIRS += src/tools/linkkit_tsl_convert
+endif
+endif
+
+
+ifeq (y,$(strip $(FEATURE_DEVICE_MODEL_ENABLED)))
+    CFLAGS += -DLOG_REPORT_TO_CLOUD
+endif

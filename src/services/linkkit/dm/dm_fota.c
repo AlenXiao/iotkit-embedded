@@ -1,41 +1,34 @@
 /*
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
-
-
-
+#if defined(OTA_ENABLED) && !defined(BUILD_AOS)
 #include "iotx_dm_internal.h"
 
-#ifdef OTA_ENABLED
 static dm_fota_ctx_t g_dm_fota_ctx;
 
 static dm_fota_ctx_t *_dm_fota_get_ctx(void)
 {
     return &g_dm_fota_ctx;
 }
-#endif
 
 int dm_fota_init(void)
 {
-#ifdef OTA_ENABLED
     dm_fota_ctx_t *ctx = _dm_fota_get_ctx();
 
     memset(ctx, 0, sizeof(dm_fota_ctx_t));
-#endif
+
     return SUCCESS_RETURN;
 }
 
 int dm_fota_deinit(void)
 {
-#ifdef OTA_ENABLED
     dm_fota_ctx_t *ctx = _dm_fota_get_ctx();
 
     memset(ctx, 0, sizeof(dm_fota_ctx_t));
-#endif
+
     return SUCCESS_RETURN;
 }
 
-#ifdef OTA_ENABLED
 static int _dm_fota_send_new_config_to_user(void *ota_handle)
 {
     int res = 0, message_len = 0;
@@ -66,11 +59,9 @@ static int _dm_fota_send_new_config_to_user(void *ota_handle)
 
     return SUCCESS_RETURN;
 }
-#endif
 
 int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
 {
-#ifdef OTA_ENABLED
     int res = 0, file_download = 0;
     uint32_t file_size = 0, file_downloaded = 0;
     uint32_t percent_pre = 0, percent_now = 0;
@@ -102,12 +93,12 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_RESET_FETCHED_SIZE, ota_handle, 4);
     /* Prepare Write Data To Storage */
     HAL_Firmware_Persistence_Start();
-    ctx->is_report_new_config = 0;
     while (1) {
         file_download = IOT_OTA_FetchYield(ota_handle, output, output_len, 1);
         if (file_download < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_FETCH_FAILED, NULL);
             HAL_Firmware_Persistence_Stop();
+            ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
 
@@ -139,6 +130,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
             IOT_OTA_Ioctl(ota_handle, IOT_OTAG_CHECK_FIRMWARE, &file_isvalid, 4);
             if (file_isvalid == 0) {
                 HAL_Firmware_Persistence_Stop();
+                ctx->is_report_new_config = 0;
                 return FAIL_RETURN;
             } else {
                 break;
@@ -147,13 +139,13 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     }
 
     HAL_Firmware_Persistence_Stop();
-#endif
+    ctx->is_report_new_config = 0;
+
     return SUCCESS_RETURN;
 }
 
 int dm_fota_status_check(void)
 {
-#ifdef OTA_ENABLED
     int res = 0;
     dm_fota_ctx_t *ctx = _dm_fota_get_ctx();
     void *ota_handle = NULL;
@@ -180,13 +172,12 @@ int dm_fota_status_check(void)
             }
         }
     }
-#endif
+
     return SUCCESS_RETURN;
 }
 
 int dm_fota_request_image(const char *version, int buffer_len)
 {
-#ifdef OTA_ENABLED
     int res = 0;
     void *ota_handle = NULL;
 
@@ -209,10 +200,8 @@ int dm_fota_request_image(const char *version, int buffer_len)
     memset(version_str, 0, buffer_len + 1);
     memcpy(version_str, version, buffer_len);
 
-    int ret = IOT_OTA_RequestImage(ota_handle, version_str);
+    int ret = iotx_req_image(ota_handle, version_str);
     DM_free(version_str);
     return ret;
-#else
-    return SUCCESS_RETURN;
-#endif
 }
+#endif

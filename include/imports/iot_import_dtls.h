@@ -2,13 +2,17 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
+#ifndef __IMPORT_DTLS_H__
+#define __IMPORT_DTLS_H__
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <stdarg.h>
-
-#ifndef __IMPORT_DTLS_H__
-#define __IMPORT_DTLS_H__
 
 #define DTLS_ERROR_BASE                (1<<24)
 #define DTLS_SUCCESS                   (0)
@@ -20,6 +24,11 @@
 #define DTLS_PEER_CLOSE_NOTIFY         (DTLS_ERROR_BASE | 6)
 #define DTLS_SESSION_CREATE_FAILED     (DTLS_ERROR_BASE | 7)
 #define DTLS_READ_DATA_FAILED          (DTLS_ERROR_BASE | 8)
+
+typedef struct {
+    void *(*malloc)(uint32_t size);
+    void (*free)(void *ptr);
+} dtls_hooks_t;
 
 typedef struct {
     unsigned char             *p_ca_cert_pem;
@@ -38,6 +47,17 @@ typedef void DTLSContext;
  *  @{
  */
 
+/**
+ * @brief Set malloc/free function.
+ *
+ * @param [in] hooks: @n Specify malloc/free function you want to use
+ *
+ * @retval DTLS_SUCCESS : Success.
+   @retval        other : Fail.
+ * @see None.
+ * @note None.
+ */
+DLL_HAL_API int HAL_DTLSHooks_set(dtls_hooks_t *hooks);
 
 /**
  * @brief Establish a DSSL connection.
@@ -107,4 +127,7 @@ DLL_HAL_API unsigned int HAL_DTLSSession_free(DTLSContext *context);
 /** @} */ /* end of platform_dtls */
 /** @} */ /* end of platform */
 
+#if defined(__cplusplus)
+}
+#endif
 #endif

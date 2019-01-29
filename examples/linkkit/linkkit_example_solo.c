@@ -119,7 +119,7 @@ static int user_service_request_event_handler(const int devid, const char *servi
 
         /* Send Service Response To Cloud */
         *response_len = strlen(response_fmt) + 10 + 1;
-        *response = HAL_Malloc(*response_len);
+        *response = (char *)HAL_Malloc(*response_len);
         if (*response == NULL) {
             EXAMPLE_TRACE("Memory Not Enough");
             return -1;
@@ -140,7 +140,7 @@ static int user_service_request_event_handler(const int devid, const char *servi
 
         /* Send Service Response To Cloud */
         *response_len = strlen(response_fmt) + 10 + 1;
-        *response = HAL_Malloc(*response_len);
+        *response = (char *)HAL_Malloc(*response_len);
         if (*response == NULL) {
             EXAMPLE_TRACE("Memory Not Enough");
             return -1;
@@ -582,13 +582,6 @@ int linkkit_main(void *paras)
 
     memset(user_example_ctx, 0, sizeof(user_example_ctx_t));
 
-    /* Init cJSON Hooks */
-    cJSON_Hooks cjson_hooks;
-    cjson_hooks.malloc_fn = example_malloc;
-    cjson_hooks.free_fn = example_free;
-    cJSON_InitHooks(&cjson_hooks);
-
-    IOT_OpenLog("iot_linkkit");
     IOT_SetLogLevel(IOT_LOG_DEBUG);
 
     /* Register Callback */
@@ -629,13 +622,6 @@ int linkkit_main(void *paras)
     IOT_Ioctl(IOTX_IOCTL_SET_DOMAIN, (void *)&domain_type);
 #endif
 
-    /* Create Master Device Resources */
-    user_example_ctx->master_devid = IOT_Linkkit_Open(IOTX_LINKKIT_DEV_TYPE_MASTER, &master_meta_info);
-    if (user_example_ctx->master_devid < 0) {
-        EXAMPLE_TRACE("IOT_Linkkit_Open Failed\n");
-        return -1;
-    }
-
     /* Choose Login Method */
     int dynamic_register = 0;
     IOT_Ioctl(IOTX_IOCTL_SET_DYNAMIC_REGISTER, (void *)&dynamic_register);
@@ -643,6 +629,13 @@ int linkkit_main(void *paras)
     /* Choose Whether You Need Post Property/Event Reply */
     int post_event_reply = 1;
     IOT_Ioctl(IOTX_IOCTL_RECV_EVENT_REPLY, (void *)&post_event_reply);
+
+    /* Create Master Device Resources */
+    user_example_ctx->master_devid = IOT_Linkkit_Open(IOTX_LINKKIT_DEV_TYPE_MASTER, &master_meta_info);
+    if (user_example_ctx->master_devid < 0) {
+        EXAMPLE_TRACE("IOT_Linkkit_Open Failed\n");
+        return -1;
+    }
 
     /* Start Connect Aliyun Server */
     res = IOT_Linkkit_Connect(user_example_ctx->master_devid);
@@ -687,6 +680,10 @@ int linkkit_main(void *paras)
     }
 
     IOT_Linkkit_Close(user_example_ctx->master_devid);
+
+    IOT_DumpMemoryStats(IOT_LOG_DEBUG);
+    IOT_SetLogLevel(IOT_LOG_NONE);
+
     return 0;
 }
 #endif

@@ -17,9 +17,11 @@
 #include "iotx_utils.h"
 #include "iotx_system.h"
 #ifndef MAL_ENABLED
-#include "iotx_mqtt.h"
+#ifdef MQTT_COMM_ENABLED
+    #include "iotx_mqtt.h"
+#endif
 #else
-#include "mal.h"
+    #include "mal.h"
 #endif
 
 #define sdk_emerg(...)          log_emerg("sdk", __VA_ARGS__)
@@ -59,13 +61,9 @@ typedef enum {
 
 sdk_impl_ctx_t *sdk_impl_get_ctx(void);
 
-int impl_linkkit_ioctl(int devid, impl_linkkit_ioctl_cmd_t cmd, void *arg);
-
 int perform_dynamic_register(_IN_ char product_key[PRODUCT_KEY_MAXLEN],
                              _IN_ char product_secret[PRODUCT_SECRET_MAXLEN],
                              _IN_ char device_name[DEVICE_NAME_MAXLEN],
                              _OU_ char device_secret[DEVICE_SECRET_MAXLEN]);
-
-void* impl_event_cb(int evt);
 
 #endif  /* __SDK_IMPL_INTERNAL_H__ */

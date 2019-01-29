@@ -8,12 +8,9 @@
 #include "iot_import.h"
 #include "iotx_log.h"
 #include "iotx_utils.h"
-#ifdef CM_SUPPORT_MEMORY_MAGIC
-    #define cm_malloc(size) LITE_malloc(size, MEM_MAGIC, "CM")
-#else
-    #define cm_malloc(size) LITE_malloc(size)
-#endif
-#define cm_free(p) LITE_free(p)
+
+#define cm_malloc(size)     LITE_malloc(size, MEM_MAGIC, "cm")
+#define cm_free(p)          LITE_free(p)
 
 #ifdef ESP8266
     #include "esp_common.h"
@@ -50,6 +47,7 @@ typedef struct iotx_connection_st {
     iotx_cm_yield_fp                 yield_func;
     iotx_cm_close_fp                 close_func;
     iotx_cm_event_handle_cb          event_handler;
+    void                             *cb_data;
 
 } iotx_cm_connection_t;
 

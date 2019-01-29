@@ -14,6 +14,7 @@
 #include <float.h>
 #include <ctype.h>
 
+#include "iotx_utils.h"
 #include "lite-cjson.h"
 
 typedef struct {
@@ -85,7 +86,7 @@ static int parse_number(_IN_ lite_cjson_t *const item, _IN_ parse_buffer *const 
     /* copy the number into a temporary buffer and replace '.' with the decimal point
      * of the current locale (for strtod)
      * This also takes care of '\0' not necessarily being available for marking the end of the input */
-    for (i = 0; can_access_at_index(input_buffer, i); i++) {
+    for (i = 0; (i < (sizeof(number_c_string) - 1)) && can_access_at_index(input_buffer, i); i++) {
         switch (buffer_at_offset(input_buffer)[i]) {
             case '0':
             case '1':
@@ -475,7 +476,7 @@ static int parse_value(_IN_ lite_cjson_t *const lite, _IN_ parse_buffer *const i
 
 int lite_cjson_parse(_IN_ const char *src, _IN_ int src_len, _OU_ lite_cjson_t *lite)
 {
-    if (!lite || !src || !lite) {
+    if (!lite || !src || !lite || src_len <= 0) {
         return -1;
     }
 
@@ -496,6 +497,7 @@ int lite_cjson_parse(_IN_ const char *src, _IN_ int src_len, _OU_ lite_cjson_t *
     return 0;
 }
 
+#if 0
 int lite_cjson_is_false(_IN_ lite_cjson_t *lite)
 {
     if (!lite) {
@@ -522,6 +524,7 @@ int lite_cjson_is_null(_IN_ lite_cjson_t *lite)
 
     return (lite->type & 0xFF) == cJSON_NULL;
 }
+#endif
 
 int lite_cjson_is_number(_IN_ lite_cjson_t *lite)
 {
@@ -831,6 +834,7 @@ int lite_cjson_object_item(_IN_ lite_cjson_t *lite, _IN_ const char *key, _IN_ i
     return 0;
 }
 
+#ifdef DEPRECATED_LINKKIT
 int lite_cjson_object_item_by_index(_IN_ lite_cjson_t *lite, _IN_ int index, _OU_ lite_cjson_t *lite_item_key,
                                     _OU_ lite_cjson_t *lite_item_value)
 {
@@ -917,14 +921,16 @@ int lite_cjson_object_item_by_index(_IN_ lite_cjson_t *lite, _IN_ int index, _OU
 
     return -1;
 }
-/*** cjson create, add and print ***/
+#endif  /* #ifdef DEPRECATED_LINKKIT */
 
+/*** cjson create, add and print ***/
+#if defined(ALCS_ENABLED) || defined(DEPRECATED_LINKKIT)
 #define true ((cJSON_bool)1)
 #define false ((cJSON_bool)0)
 #define cjson_min(a, b) ((a < b) ? a : b)
 
 typedef struct internal_hooks {
-    void *(*allocate)(size_t size);
+    void *(*allocate)(uint32_t size);
     void (*deallocate)(void *pointer);
     void *(*reallocate)(void *pointer, size_t size);
 } internal_hooks;
@@ -939,38 +945,27 @@ typedef struct {
     internal_hooks hooks;
 } printbuffer;
 
-#define internal_malloc malloc
-#define internal_free free
-#define internal_realloc realloc
+static void *internal_malloc(uint32_t size)
+{
+    return HAL_Malloc(size);
+}
 
-static internal_hooks global_hooks = { internal_malloc, internal_free, internal_realloc };
+static void internal_free(void *ptr)
+{
+    HAL_Free(ptr);
+}
+
+static internal_hooks global_hooks = { internal_malloc, internal_free, NULL };
 static cJSON_bool print_value(const lite_cjson_item_t *const item, printbuffer *const output_buffer);
 
 void lite_cjson_init_hooks(lite_cjson_hooks *hooks)
 {
-    if (hooks == NULL) {
-        /* Reset hooks */
-        global_hooks.allocate = malloc;
-        global_hooks.deallocate = free;
-        global_hooks.reallocate = realloc;
+    if (hooks == NULL || hooks->malloc_fn == NULL || hooks->free_fn == NULL) {
         return;
     }
 
-    global_hooks.allocate = malloc;
-    if (hooks->malloc_fn != NULL) {
-        global_hooks.allocate = (void *(*)(size_t))hooks->malloc_fn;
-    }
-
-    global_hooks.deallocate = free;
-    if (hooks->free_fn != NULL) {
-        global_hooks.deallocate = hooks->free_fn;
-    }
-
-    /* use realloc only if both free and malloc are used */
-    global_hooks.reallocate = NULL;
-    if ((global_hooks.allocate == malloc) && (global_hooks.deallocate == free)) {
-        global_hooks.reallocate = realloc;
-    }
+    global_hooks.allocate = hooks->malloc_fn;
+    global_hooks.deallocate = hooks->free_fn;
 }
 
 static unsigned char *ensure(printbuffer *const p, size_t needed)
@@ -1055,6 +1050,40 @@ static unsigned char get_decimal_point(void)
 #endif
 }
 
+static int remove_zero(unsigned char buffer[26], int length)
+{
+    int idx = 0, found = 0;
+
+    for (idx = 0; idx < 26; idx ++) {
+        if (buffer[idx] == '.') {
+            found = 1;
+            continue;
+        }
+        if (buffer[idx] == '\0') {
+            break;
+        }
+    }
+
+    if (found == 0) {
+        return length;
+    }
+
+    for (; idx > 0; idx --) {
+        if (buffer[idx-1] == '0') {
+            buffer[idx-1] = '\0';
+            length --;
+        } else {
+            if (buffer[idx-1] == '.') {
+                buffer[idx-1] = '\0';
+                length --;
+            }
+            break;
+        }
+    }
+
+    return length;
+}
+
 /* Render the number nicely from the given item into a string. */
 static cJSON_bool print_number(const lite_cjson_item_t *const item, printbuffer *const output_buffer)
 {
@@ -1064,6 +1093,7 @@ static cJSON_bool print_number(const lite_cjson_item_t *const item, printbuffer 
     size_t i = 0;
     unsigned char number_buffer[26]; /* temporary buffer to print the number into */
     unsigned char decimal_point = get_decimal_point();
+    float test_float;
     double test;
 
     if (output_buffer == NULL) {
@@ -1074,13 +1104,20 @@ static cJSON_bool print_number(const lite_cjson_item_t *const item, printbuffer 
     if ((d * 0) != 0) {
         length = sprintf((char *)number_buffer, "null");
     } else {
-        /* Try 15 decimal places of precision to avoid nonsignificant nonzero digits */
-        length = sprintf((char *)number_buffer, "%1.15g", d);
+        /* Try float data type */
+        length = sprintf((char *)number_buffer, "%f", d);
 
-        /* Check whether the original double can be recovered */
-        if ((sscanf((char *)number_buffer, "%lg", &test) != 1) || ((double)test != d)) {
-            /* If not, print with 17 decimal places of precision */
-            length = sprintf((char *)number_buffer, "%1.17g", d);
+        if ((sscanf((char *)number_buffer, "%f", &test_float) != 1) || ((double)test_float != d)) {
+            /* Try 15 decimal places of precision to avoid nonsignificant nonzero digits */
+            length = sprintf((char *)number_buffer, "%1.15g", d);
+
+            /* Check whether the original double can be recovered */
+            if ((sscanf((char *)number_buffer, "%lg", &test) != 1) || ((double)test != d)) {
+                /* If not, print with 17 decimal places of precision */
+                length = sprintf((char *)number_buffer, "%1.17g", d);
+            }
+        } else {
+            length = remove_zero(number_buffer,length);
         }
     }
 
@@ -1856,3 +1893,4 @@ lite_cjson_item_t *lite_cjson_create_stringArray(const char **strings, int count
 
     return a;
 }
+#endif

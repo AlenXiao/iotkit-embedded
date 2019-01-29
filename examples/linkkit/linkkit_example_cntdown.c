@@ -312,8 +312,17 @@ static int property_set_handle(const int devid, const char *payload, const int p
     /* Get timeStamp value */
     item = cJSON_GetObjectItem(prop, PROPERTY_ITEM_TIMESTAMP);
     if (item != NULL && cJSON_IsString(item)) {
-        strcpy(app_ctx->timestamp, item->valuestring);
-        EXAMPLE_TRACE("Timestamp is %s", app_ctx->timestamp);
+        int len = strlen(item->valuestring);
+        if (len < 20) {
+            memset(app_ctx->timestamp, 0, sizeof(app_ctx->timestamp));
+            memcpy(app_ctx->timestamp, item->valuestring, len);
+            EXAMPLE_TRACE("Timestamp is %s", app_ctx->timestamp);
+        }
+        else {
+            EXAMPLE_TRACE("Timestamp string error");
+            cJSON_Delete(root);
+            return ret;                    
+        }
     } else {
         cJSON_Delete(root);
         return ret;
@@ -496,6 +505,8 @@ int linkkit_main(void *paras)
     IOT_DumpMemoryStats(IOT_LOG_DEBUG);
 
     EXAMPLE_TRACE("out of example!\n");
+
+    IOT_SetLogLevel(IOT_LOG_NONE);
 
     return 0;
 }

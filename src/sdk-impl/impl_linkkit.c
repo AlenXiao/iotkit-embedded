@@ -8,8 +8,12 @@
 
 #include "iot_export_linkkit.h"
 #include "sdk-impl_internal.h"
-#include "lite-cjson.h"
+#include "iotx_system.h"
+#include "iotx_utils.h"
 #include "iotx_dm.h"
+
+#define IMPL_LINKKIT_MALLOC(size) LITE_malloc(size, MEM_MAGIC, "impl.linkkit")
+#define IMPL_LINKKIT_FREE(ptr)    LITE_free(ptr)
 
 #define IOTX_LINKKIT_KEY_ID          "id"
 #define IOTX_LINKKIT_KEY_CODE        "code"
@@ -120,7 +124,7 @@ static int _iotx_linkkit_upstream_sync_callback_list_insert(int msgid, void *sem
         }
     }
 
-    search_node = HAL_Malloc(sizeof(iotx_linkkit_upstream_sync_callback_node_t));
+    search_node = IMPL_LINKKIT_MALLOC(sizeof(iotx_linkkit_upstream_sync_callback_node_t));
     if (search_node == NULL) {
         sdk_debug("malloc error");
         return FAIL_RETURN;
@@ -148,7 +152,7 @@ static int _iotx_linkkit_upstream_sync_callback_list_remove(int msgid)
             sdk_debug("Message Found: %d, Delete It", msgid);
             HAL_SemaphoreDestroy(search_node->semaphore);
             list_del(&search_node->linked_list);
-            HAL_Free(search_node);
+            IMPL_LINKKIT_FREE(search_node);
             return SUCCESS_RETURN;
         }
     }
@@ -188,7 +192,7 @@ static void _iotx_linkkit_upstream_sync_callback_list_destroy(void)
                              iotx_linkkit_upstream_sync_callback_node_t) {
         list_del(&search_node->linked_list);
         HAL_SemaphoreDestroy(search_node->semaphore);
-        HAL_Free(search_node);
+        IMPL_LINKKIT_FREE(search_node);
     }
 }
 
@@ -206,10 +210,19 @@ static void _iotx_linkkit_upstream_callback_remove(int msgid, int code)
 }
 #endif
 
+#ifdef LOG_REPORT_TO_CLOUD
+    int  report_sample = 0;
+#endif
+#ifdef ALCS_ENABLED
+    extern void dm_server_free_context(_IN_ void *ctx);
+#endif
 static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *payload)
 {
     int res = 0;
     void *callback;
+#ifdef LOG_REPORT_TO_CLOUD
+    lite_cjson_t msg_id;
+#endif
     lite_cjson_t lite, lite_item_id, lite_item_devid, lite_item_serviceid, lite_item_payload, lite_item_ctx;
     lite_cjson_t lite_item_code, lite_item_eventid, lite_item_utc, lite_item_rrpcid, lite_item_topo;
     lite_cjson_t lite_item_pk, lite_item_time;
@@ -223,6 +236,9 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
         if (res != SUCCESS_RETURN) {
             return;
         }
+#ifdef LOG_REPORT_TO_CLOUD
+        dm_utils_json_object_item(&lite, "msgid", 5, cJSON_Invalid, &msg_id);
+#endif
         dm_utils_json_object_item(&lite, IOTX_LINKKIT_KEY_ID, strlen(IOTX_LINKKIT_KEY_ID), cJSON_Invalid, &lite_item_id);
         dm_utils_json_object_item(&lite, IOTX_LINKKIT_KEY_DEVID, strlen(IOTX_LINKKIT_KEY_DEVID), cJSON_Invalid,
                                   &lite_item_devid);
@@ -262,14 +278,14 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
 
     switch (type) {
         case IOTX_DM_EVENT_CLOUD_CONNECTED: {
-            callback = impl_event_cb(ITE_CONNECT_SUCC);
+            callback = iotx_event_callback(ITE_CONNECT_SUCC);
             if (callback) {
                 ((int (*)(void))callback)();
             }
         }
         break;
         case IOTX_DM_EVENT_CLOUD_DISCONNECT: {
-            callback = impl_event_cb(ITE_DISCONNECTED);
+            callback = iotx_event_callback(ITE_DISCONNECTED);
             if (callback) {
                 ((int (*)(void))callback)();
             }
@@ -282,15 +298,78 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
 
             sdk_debug("Current Devid: %d", lite_item_devid.value_int);
 
-            callback = impl_event_cb(ITE_INITIALIZE_COMPLETED);
+            callback = iotx_event_callback(ITE_INITIALIZE_COMPLETED);
             if (callback) {
                 ((int (*)(const int))callback)(lite_item_devid.value_int);
             }
         }
         break;
+        case IOTX_DM_EVENT_MODEL_DOWN_RAW: {
+            int raw_data_len = 0;
+            unsigned char *raw_data = NULL;
+
+            if (payload == NULL || lite_item_devid.type != cJSON_Number || lite_item_payload.type != cJSON_String) {
+                return;
+            }
+
+            sdk_debug("Current Devid: %d", lite_item_devid.value_int);
+            sdk_debug("Current Raw Data: %.*s", lite_item_payload.value_length, lite_item_payload.value);
+
+            raw_data_len = lite_item_payload.value_length / 2;
+            raw_data = IMPL_LINKKIT_MALLOC(raw_data_len);
+            if (raw_data == NULL) {
+                sdk_err("No Enough Memory");
+                return;
+            }
+            LITE_hexstr_convert(lite_item_payload.value, lite_item_payload.value_length, raw_data, raw_data_len);
+
+            HEXDUMP_DEBUG(raw_data, raw_data_len);
+
+            callback = iotx_event_callback(ITE_RAWDATA_ARRIVED);
+            if (callback) {
+                ((int (*)(const int, const unsigned char *, const int))callback)(lite_item_devid.value_int, raw_data, raw_data_len);
+            }
+
+            IMPL_LINKKIT_FREE(raw_data);
+        }
+        break;
+        case IOTX_DM_EVENT_MODEL_UP_RAW_REPLY: {
+            int raw_data_len = 0;
+            unsigned char *raw_data = NULL;
+
+            if (payload == NULL || lite_item_devid.type != cJSON_Number || lite_item_payload.type != cJSON_String) {
+                return;
+            }
+
+            sdk_debug("Current Devid: %d", lite_item_devid.value_int);
+            sdk_debug("Current Raw Data: %.*s", lite_item_payload.value_length, lite_item_payload.value);
+
+            raw_data_len = lite_item_payload.value_length / 2;
+            raw_data = IMPL_LINKKIT_MALLOC(raw_data_len);
+            if (raw_data == NULL) {
+                sdk_err("No Enough Memory");
+                return;
+            }
+            memset(raw_data, 0, raw_data_len);
+            LITE_hexstr_convert(lite_item_payload.value, lite_item_payload.value_length, raw_data, raw_data_len);
+
+            HEXDUMP_DEBUG(raw_data, raw_data_len);
+
+            callback = iotx_event_callback(ITE_RAWDATA_ARRIVED);
+            if (callback) {
+                ((int (*)(const int, const unsigned char *, const int))callback)(lite_item_devid.value_int, raw_data, raw_data_len);
+            }
+
+            IMPL_LINKKIT_FREE(raw_data);
+        }
+        break;
+#if !defined(DEVICE_MODEL_RAWDATA_SOLO)
         case IOTX_DM_EVENT_THING_SERVICE_REQUEST: {
             int response_len = 0;
             char *request = NULL, *response = NULL;
+
+            uintptr_t property_get_ctx_num = 0;
+            void *property_get_ctx = NULL;
 
             if (payload == NULL || lite_item_id.type != cJSON_String || lite_item_devid.type != cJSON_Number ||
                 lite_item_serviceid.type != cJSON_String || lite_item_payload.type != cJSON_Object) {
@@ -301,8 +380,15 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current Devid: %d", lite_item_devid.value_int);
             sdk_debug("Current ServiceID: %.*s", lite_item_serviceid.value_length, lite_item_serviceid.value);
             sdk_debug("Current Payload: %.*s", lite_item_payload.value_length, lite_item_payload.value);
+            sdk_debug("Current Ctx: %.*s", lite_item_ctx.value_length, lite_item_ctx.value);
 
-            request = HAL_Malloc(lite_item_payload.value_length + 1);
+            LITE_hexstr_convert(lite_item_ctx.value, lite_item_ctx.value_length, (unsigned char *)&property_get_ctx_num,
+                                sizeof(uintptr_t));
+            property_get_ctx = (void *)property_get_ctx_num;
+            // sdk_debug("property_get_ctx_num: %0x016llX", property_get_ctx_num);
+            // sdk_debug("property_get_ctx: %p", property_get_ctx);
+
+            request = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
             if (request == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -310,7 +396,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(request, 0, lite_item_payload.value_length + 1);
             memcpy(request, lite_item_payload.value, lite_item_payload.value_length);
 
-            callback = impl_event_cb(ITE_SERVICE_REQUST);
+            callback = iotx_event_callback(ITE_SERVICE_REQUST);
             if (callback) {
                 res = ((int (*)(const int, const char *, const int, const char *, const int, char **,
                                 int *))callback)(lite_item_devid.value_int, lite_item_serviceid.value,
@@ -321,12 +407,16 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                     iotx_dm_send_service_response(lite_item_devid.value_int, lite_item_id.value, lite_item_id.value_length, code,
                                                   lite_item_serviceid.value,
                                                   lite_item_serviceid.value_length,
-                                                  response, response_len);
+                                                  response, response_len, property_get_ctx);
                     HAL_Free(response);
                 }
             }
-
-            HAL_Free(request);
+#ifdef ALCS_ENABLED
+            if (property_get_ctx) {
+                dm_server_free_context(property_get_ctx);
+            }
+#endif
+            IMPL_LINKKIT_FREE(request);
         }
         break;
         case IOTX_DM_EVENT_PROPERTY_SET: {
@@ -339,21 +429,33 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current Devid: %d", lite_item_devid.value_int);
             sdk_debug("Current Payload: %.*s", lite_item_payload.value_length, lite_item_payload.value);
 
-            property_payload = HAL_Malloc(lite_item_payload.value_length + 1);
+            property_payload = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
             if (property_payload == NULL) {
                 sdk_err("No Enough Memory");
                 return;
             }
+#ifdef LOG_REPORT_TO_CLOUD
+            if (SUCCESS_RETURN == check_target_msg(msg_id.value, msg_id.value_length)) {
+                report_sample = 1;
+                send_permance_info(msg_id.value, msg_id.value_length, "3", 1);
+            }
+#endif
+
             memset(property_payload, 0, lite_item_payload.value_length + 1);
             memcpy(property_payload, lite_item_payload.value, lite_item_payload.value_length);
-
-            callback = impl_event_cb(ITE_PROPERTY_SET);
+            callback = iotx_event_callback(ITE_PROPERTY_SET);
             if (callback) {
                 ((int (*)(const int, const char *, const int))callback)(lite_item_devid.value_int, property_payload,
                         lite_item_payload.value_length);
             }
+#ifdef LOG_REPORT_TO_CLOUD
+            if (1 == report_sample) {
+                send_permance_info(NULL, 0, "5", 2);
+                report_sample = 0;
+            }
+#endif
 
-            HAL_Free(property_payload);
+            IMPL_LINKKIT_FREE(property_payload);
         }
         break;
         case IOTX_DM_EVENT_PROPERTY_GET: {
@@ -378,7 +480,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("property_get_ctx_num: %0x016llX", property_get_ctx_num);
             sdk_debug("property_get_ctx: %p", property_get_ctx);
 
-            request = HAL_Malloc(lite_item_payload.value_length + 1);
+            request = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
             if (request == NULL) {
                 sdk_err("No Enough Memory");
                 return;
@@ -386,7 +488,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(request, 0, lite_item_payload.value_length + 1);
             memcpy(request, lite_item_payload.value, lite_item_payload.value_length);
 
-            callback = impl_event_cb(ITE_PROPERTY_GET);
+            callback = iotx_event_callback(ITE_PROPERTY_GET);
             if (callback) {
                 res = ((int (*)(const int, const char *, const int, char **, int *))callback)(lite_item_devid.value_int, request,
                         lite_item_payload.value_length, &response, &response_len);
@@ -400,66 +502,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                 }
             }
 
-            HAL_Free(request);
-        }
-        break;
-        case IOTX_DM_EVENT_MODEL_DOWN_RAW: {
-            int raw_data_len = 0;
-            unsigned char *raw_data = NULL;
-
-            if (payload == NULL || lite_item_devid.type != cJSON_Number || lite_item_payload.type != cJSON_String) {
-                return;
-            }
-
-            sdk_debug("Current Devid: %d", lite_item_devid.value_int);
-            sdk_debug("Current Raw Data: %.*s", lite_item_payload.value_length, lite_item_payload.value);
-
-            raw_data_len = lite_item_payload.value_length / 2;
-            raw_data = HAL_Malloc(raw_data_len);
-            if (raw_data == NULL) {
-                sdk_err("No Enough Memory");
-                return;
-            }
-            LITE_hexstr_convert(lite_item_payload.value, lite_item_payload.value_length, raw_data, raw_data_len);
-
-            HEXDUMP_DEBUG(raw_data, raw_data_len);
-
-            callback = impl_event_cb(ITE_RAWDATA_ARRIVED);
-            if (callback) {
-                ((int (*)(const int, const unsigned char *, const int))callback)(lite_item_devid.value_int, raw_data, raw_data_len);
-            }
-
-            HAL_Free(raw_data);
-        }
-        break;
-        case IOTX_DM_EVENT_MODEL_UP_RAW_REPLY: {
-            int raw_data_len = 0;
-            unsigned char *raw_data = NULL;
-
-            if (payload == NULL || lite_item_devid.type != cJSON_Number || lite_item_payload.type != cJSON_String) {
-                return;
-            }
-
-            sdk_debug("Current Devid: %d", lite_item_devid.value_int);
-            sdk_debug("Current Raw Data: %.*s", lite_item_payload.value_length, lite_item_payload.value);
-
-            raw_data_len = lite_item_payload.value_length / 2;
-            raw_data = HAL_Malloc(raw_data_len);
-            if (raw_data == NULL) {
-                sdk_err("No Enough Memory");
-                return;
-            }
-            memset(raw_data, 0, raw_data_len);
-            LITE_hexstr_convert(lite_item_payload.value, lite_item_payload.value_length, raw_data, raw_data_len);
-
-            HEXDUMP_DEBUG(raw_data, raw_data_len);
-
-            callback = impl_event_cb(ITE_RAWDATA_ARRIVED);
-            if (callback) {
-                ((int (*)(const int, const unsigned char *, const int))callback)(lite_item_devid.value_int, raw_data, raw_data_len);
-            }
-
-            HAL_Free(raw_data);
+            IMPL_LINKKIT_FREE(request);
         }
         break;
         case IOTX_DM_EVENT_EVENT_PROPERTY_POST_REPLY:
@@ -478,7 +521,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current Devid: %d", lite_item_devid.value_int);
 
             if (lite_item_payload.type == cJSON_Object && lite_item_payload.value_length > 0) {
-                user_payload = HAL_Malloc(lite_item_payload.value_length + 1);
+                user_payload = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
                 if (user_payload == NULL) {
                     sdk_err("No Enough Memory");
                     return;
@@ -488,7 +531,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                 user_payload_length = lite_item_payload.value_length;
             }
 
-            callback = impl_event_cb(ITE_REPORT_REPLY);
+            callback = iotx_event_callback(ITE_REPORT_REPLY);
             if (callback) {
                 ((int (*)(const int, const int, const int, const char *, const int))callback)(lite_item_devid.value_int,
                         lite_item_id.value_int, lite_item_code.value_int, user_payload,
@@ -496,7 +539,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             }
 
             if (user_payload) {
-                HAL_Free(user_payload);
+                IMPL_LINKKIT_FREE(user_payload);
             }
         }
         break;
@@ -516,7 +559,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current EventID: %.*s", lite_item_eventid.value_length, lite_item_eventid.value);
             sdk_debug("Current Message: %.*s", lite_item_payload.value_length, lite_item_payload.value);
 
-            user_eventid = HAL_Malloc(lite_item_eventid.value_length + 1);
+            user_eventid = IMPL_LINKKIT_MALLOC(lite_item_eventid.value_length + 1);
             if (user_eventid == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -524,17 +567,17 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(user_eventid, 0, lite_item_eventid.value_length + 1);
             memcpy(user_eventid, lite_item_eventid.value, lite_item_eventid.value_length);
 
-            user_payload = HAL_Malloc(lite_item_payload.value_length + 1);
+            user_payload = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
             if (user_payload == NULL) {
                 sdk_err("Not Enough Memory");
-                HAL_Free(user_eventid);
+                IMPL_LINKKIT_FREE(user_eventid);
                 return;
             }
             memset(user_payload, 0, lite_item_payload.value_length + 1);
             memcpy(user_payload, lite_item_payload.value, lite_item_payload.value_length);
 
 
-            callback = impl_event_cb(ITE_TRIGGER_EVENT_REPLY);
+            callback = iotx_event_callback(ITE_TRIGGER_EVENT_REPLY);
             if (callback) {
                 ((int (*)(const int, const int, const int, const char *, const int, const char *,
                           const int))callback)(lite_item_devid.value_int,
@@ -542,8 +585,8 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                                                user_eventid, lite_item_eventid.value_length, user_payload, lite_item_payload.value_length);
             }
 
-            HAL_Free(user_eventid);
-            HAL_Free(user_payload);
+            IMPL_LINKKIT_FREE(user_eventid);
+            IMPL_LINKKIT_FREE(user_payload);
         }
         break;
         case IOTX_DM_EVENT_NTP_RESPONSE: {
@@ -555,7 +598,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
 
             sdk_debug("Current UTC: %.*s", lite_item_utc.value_length, lite_item_utc.value);
 
-            utc_payload = HAL_Malloc(lite_item_utc.value_length + 1);
+            utc_payload = IMPL_LINKKIT_MALLOC(lite_item_utc.value_length + 1);
             if (utc_payload == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -563,12 +606,12 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(utc_payload, 0, lite_item_utc.value_length + 1);
             memcpy(utc_payload, lite_item_utc.value, lite_item_utc.value_length);
 
-            callback = impl_event_cb(ITE_TIMESTAMP_REPLY);
+            callback = iotx_event_callback(ITE_TIMESTAMP_REPLY);
             if (callback) {
                 ((int (*)(const char *))callback)(utc_payload);
             }
 
-            HAL_Free(utc_payload);
+            IMPL_LINKKIT_FREE(utc_payload);
         }
         break;
         case IOTX_DM_EVENT_RRPC_REQUEST: {
@@ -587,7 +630,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current RRPC ID: %.*s", lite_item_rrpcid.value_length, lite_item_rrpcid.value);
             sdk_debug("Current Payload: %.*s", lite_item_payload.value_length, lite_item_payload.value);
 
-            rrpc_request = HAL_Malloc(lite_item_payload.value_length + 1);
+            rrpc_request = IMPL_LINKKIT_MALLOC(lite_item_payload.value_length + 1);
             if (rrpc_request == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -595,7 +638,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(rrpc_request, 0, lite_item_payload.value_length + 1);
             memcpy(rrpc_request, lite_item_payload.value, lite_item_payload.value_length);
 
-            callback = impl_event_cb(ITE_SERVICE_REQUST);
+            callback = iotx_event_callback(ITE_SERVICE_REQUST);
             if (callback) {
                 res = ((int (*)(const int, const char *, const int, const char *, const int, char **,
                                 int *))callback)(lite_item_devid.value_int, lite_item_serviceid.value,
@@ -611,9 +654,10 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                 }
             }
 
-            HAL_Free(rrpc_request);
+            IMPL_LINKKIT_FREE(rrpc_request);
         }
         break;
+#endif
         case IOTX_DM_EVENT_FOTA_NEW_FIRMWARE: {
             char *version = NULL;
 
@@ -630,7 +674,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(version, 0, lite_item_version.value_length + 1);
             memcpy(version, lite_item_version.value, lite_item_version.value_length);
 
-            callback = impl_event_cb(ITE_FOTA);
+            callback = iotx_event_callback(ITE_FOTA);
             if (callback) {
                 ((int (*)(const int, const char *))callback)(0, version);
             }
@@ -685,7 +729,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
                 return;
             }
 
-            callback = impl_event_cb(ITE_COTA);
+            callback = iotx_event_callback(ITE_COTA);
             if (callback) {
                 ((int (*)(const int, const char *, int, const char *, const char *, const char *, const char *))callback)(0, config_id,
                         lite_item_configsize.value_int, get_type, sign, sign_method, url);
@@ -721,7 +765,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current Code: %d", lite_item_code.value_int);
             sdk_debug("Current Topo List: %.*s", lite_item_topo.value_length, lite_item_topo.value);
 
-            topo_list = HAL_Malloc(lite_item_topo.value_length + 1);
+            topo_list = IMPL_LINKKIT_MALLOC(lite_item_topo.value_length + 1);
             if (topo_list == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -729,14 +773,14 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(topo_list, 0, lite_item_topo.value_length + 1);
             memcpy(topo_list, lite_item_topo.value, lite_item_topo.value_length);
 
-            callback = impl_event_cb(ITE_TOPOLIST_REPLY);
+            callback = iotx_event_callback(ITE_TOPOLIST_REPLY);
             if (callback) {
                 ((int (*)(const int, const int, const int, const char *, const int))callback)(lite_item_devid.value_int,
                         lite_item_id.value_int,
                         lite_item_code.value_int, topo_list, lite_item_topo.value_length);
             }
 
-            HAL_Free(topo_list);
+            IMPL_LINKKIT_FREE(topo_list);
         }
         break;
         case IOTX_DM_EVENT_TOPO_DELETE_REPLY:
@@ -766,7 +810,7 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             sdk_debug("Current Product Key: %.*s", lite_item_pk.value_length, lite_item_pk.value);
             sdk_debug("Current Time: %d", lite_item_time.value_int);
 
-            product_key = HAL_Malloc(lite_item_pk.value_length + 1);
+            product_key = IMPL_LINKKIT_MALLOC(lite_item_pk.value_length + 1);
             if (product_key == NULL) {
                 sdk_err("Not Enough Memory");
                 return;
@@ -774,12 +818,12 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
             memset(product_key, 0, lite_item_pk.value_length + 1);
             memcpy(product_key, lite_item_pk.value, lite_item_pk.value_length);
 
-            callback = impl_event_cb(ITE_PERMIT_JOIN);
+            callback = iotx_event_callback(ITE_PERMIT_JOIN);
             if (callback) {
-                ((int (*)(const char *, int))callback)((const char *)product_key, lite_item_time.value_int);
+                ((int (*)(const char *, int))callback)((const char *)product_key, (const int)lite_item_time.value_int);
             }
 
-            HAL_Free(product_key);
+            IMPL_LINKKIT_FREE(product_key);
         }
         break;
 #endif
@@ -1054,32 +1098,6 @@ static int _iotx_linkkit_master_close(void)
     return SUCCESS_RETURN;
 }
 
-int impl_linkkit_ioctl(int devid, impl_linkkit_ioctl_cmd_t cmd, void *arg)
-{
-    int res = 0;
-    iotx_linkkit_ctx_t *ctx = _iotx_linkkit_get_ctx();
-
-    if (devid < 0 || cmd < 0 || cmd >= IMPL_LINKKIT_IOCTL_MAX) {
-        sdk_err("Invalid Parameter");
-        return FAIL_RETURN;
-    }
-
-    if (ctx->is_opened == 0) {
-        return FAIL_RETURN;
-    }
-
-    _iotx_linkkit_mutex_lock();
-    if (devid == IOTX_DM_LOCAL_NODE_DEVID) {
-        res = iotx_dm_set_opt(cmd, arg);
-    } else {
-        res = FAIL_RETURN;
-    }
-
-    _iotx_linkkit_mutex_unlock();
-
-    return res;
-}
-
 int IOT_Linkkit_Open(iotx_linkkit_dev_type_t dev_type, iotx_linkkit_dev_meta_info_t *meta_info)
 {
     int res = 0;
@@ -1176,15 +1194,14 @@ int IOT_Linkkit_Close(int devid)
         return FAIL_RETURN;
     }
 
-#ifdef DEVICE_MODEL_ENABLED
-    extern int awss_bind_deinit();
-    awss_bind_deinit();
-#endif
-
     if (devid == IOTX_DM_LOCAL_NODE_DEVID) {
         res = _iotx_linkkit_master_close();
+#ifdef DEV_BIND_ENABLED
+        extern int awss_bind_deinit(void);
+        awss_bind_deinit();
+#endif
     } else {
-        res = FAIL_RETURN;
+        return FAIL_RETURN;
     }
 
     return res;
@@ -1241,7 +1258,7 @@ static int _iotx_linkkit_subdev_login(int devid)
 
     iotx_dm_send_aos_active(devid);
 
-    void *callback = impl_event_cb(ITE_INITIALIZE_COMPLETED);
+    void *callback = iotx_event_callback(ITE_INITIALIZE_COMPLETED);
     if (callback) {
         ((int (*)(const int))callback)(devid);
     }
@@ -1313,6 +1330,7 @@ int IOT_Linkkit_Report(int devid, iotx_linkkit_msg_type_t msg_type, unsigned cha
 
     _iotx_linkkit_mutex_lock();
     switch (msg_type) {
+#if !defined(DEVICE_MODEL_RAWDATA_SOLO)
         case ITM_MSG_POST_PROPERTY: {
             if (payload == NULL || payload_len <= 0) {
                 sdk_err("Invalid Parameter");
@@ -1320,6 +1338,11 @@ int IOT_Linkkit_Report(int devid, iotx_linkkit_msg_type_t msg_type, unsigned cha
                 return FAIL_RETURN;
             }
             res = iotx_dm_post_property(devid, (char *)payload, payload_len);
+#ifdef LOG_REPORT_TO_CLOUD
+            if (1 == report_sample) {
+                send_permance_info(NULL, 0, "4", 1);
+            }
+#endif
         }
         break;
         case ITM_MSG_DEVICEINFO_UPDATE: {
@@ -1340,6 +1363,7 @@ int IOT_Linkkit_Report(int devid, iotx_linkkit_msg_type_t msg_type, unsigned cha
             res = iotx_dm_deviceinfo_delete(devid, (char *)payload, payload_len);
         }
         break;
+#endif
         case ITM_MSG_POST_RAW_DATA: {
             if (payload == NULL || payload_len <= 0) {
                 sdk_err("Invalid Parameter");
@@ -1399,10 +1423,12 @@ int IOT_Linkkit_Query(int devid, iotx_linkkit_msg_type_t msg_type, unsigned char
 
     _iotx_linkkit_mutex_lock();
     switch (msg_type) {
+#if !defined(DEVICE_MODEL_RAWDATA_SOLO)
         case ITM_MSG_QUERY_TIMESTAMP: {
             res = iotx_dm_qurey_ntp();
         }
         break;
+#endif
         case ITM_MSG_QUERY_TOPOLIST: {
 #ifdef DEVICE_MODEL_GATEWAY
             res = iotx_dm_query_topo_list();
@@ -1439,6 +1465,7 @@ int IOT_Linkkit_Query(int devid, iotx_linkkit_msg_type_t msg_type, unsigned char
 
 int IOT_Linkkit_TriggerEvent(int devid, char *eventid, int eventid_len, char *payload, int payload_len)
 {
+#if !defined(DEVICE_MODEL_RAWDATA_SOLO)
     int res = 0;
     iotx_linkkit_ctx_t *ctx = _iotx_linkkit_get_ctx();
 
@@ -1456,6 +1483,9 @@ int IOT_Linkkit_TriggerEvent(int devid, char *eventid, int eventid_len, char *pa
     _iotx_linkkit_mutex_unlock();
 
     return res;
+#else
+    return -1;
+#endif
 }
 
 #endif

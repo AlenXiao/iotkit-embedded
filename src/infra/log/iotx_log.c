@@ -2,6 +2,27 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
+/* 31, red. 32, green. 33, yellow. 34, blue. 35, magenta. 36, cyan. 37, white. */
+char *lvl_color[] = {
+    "[0m", "[1;31m", "[1;31m", "[1;35m", "[1;33m", "[1;36m", "[1;37m"
+};
+
+
+#ifdef BUILD_AOS 
+#include "aos/log.h"
+
+extern unsigned int aos_log_level;
+int LITE_get_loglevel(void)
+{
+    return aos_log_level;
+}
+
+void LITE_set_loglevel(int pri)
+{
+    aos_set_log_level((aos_log_level_t)pri);
+}
+
+#else
 #include "iotx_log_internal.h"
 
 static log_client logcb = {
@@ -14,10 +35,7 @@ static char *lvl_names[] = {
     "non", "crt", "err", "wrn", "inf", "dbg", "flw"
 };
 
-/* 31, red. 32, green. 33, yellow. 34, blue. 35, magenta. 36, cyan. 37, white. */
-char *lvl_color[] = {
-    "[0m", "[1;31m", "[1;31m", "[1;35m", "[1;33m", "[1;36m", "[1;37m"
-};
+
 
 void LITE_syslog_routine(char *m, const char *f, const int l, const int level, const char *fmt, va_list *params)
 {
@@ -79,6 +97,22 @@ int LITE_get_loglevel(void)
 void LITE_set_loglevel(int pri)
 {
     logcb.priority = pri;
+
+#if WITH_MEM_STATS
+    void **mutex = LITE_get_mem_mutex();
+    if (pri != LOG_NONE_LEVEL) {
+        if (*mutex == NULL) {
+            *mutex = HAL_MutexCreate();
+            if (*mutex == NULL) {
+                LITE_printf("\nCreate memStats mutex error\n");
+            }
+        }
+    }
+    else if (*mutex != NULL){
+        HAL_MutexDestroy(*mutex);
+        *mutex = NULL;
+    }
+#endif
 }
 
 void LITE_rich_hexdump(const char *f, const int l,
@@ -199,4 +233,4 @@ int LITE_hexdump(const char *title, const void *buff, const int len)
 
     return 0;
 }
-
+#endif

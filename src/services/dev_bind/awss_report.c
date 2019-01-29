@@ -3,9 +3,10 @@
  */
 #include <stdint.h>
 #include "json_parser.h"
-#include "awss_timer.h"
 #include "awss_cmp.h"
+#include "awss_timer.h"
 #include "awss_packet.h"
+#include "awss_bind_statis.h"
 #include "awss_utils.h"
 #include "awss_log.h"
 #include "passwd.h"
@@ -45,6 +46,9 @@ int awss_token_remain_time()
     uint32_t cur = os_get_time_ms();
     uint32_t diff = (uint32_t)(cur - awss_report_token_time);
 
+    if (awss_report_token_suc == 0)
+        return remain;
+
     if (diff < AWSS_TOKEN_TIMEOUT_MS)
         remain = AWSS_TOKEN_TIMEOUT_MS - diff;
 
@@ -61,7 +65,7 @@ int awss_update_token()
         report_token_timer = HAL_Timer_Create("rp_token", (void (*)(void *))awss_report_token_to_cloud, NULL);
     HAL_Timer_Stop(report_token_timer);
     HAL_Timer_Start(report_token_timer, 10);
-    awss_debug("update token");
+    awss_info("update token");
 
     produce_random(aes_random, sizeof(aes_random));
     return 0;
@@ -80,19 +84,32 @@ int awss_token_timeout()
 
 void awss_report_token_reply(void *pcontext, void *pclient, void *msg)
 {
-    int ret;
-    uint32_t payload_len;
+    int ret, len;
     char *payload;
+    char *id = NULL;
+    char reply_id = 0;
+    uint32_t payload_len;
 
     ret = awss_cmp_mqtt_get_payload(msg, &payload, &payload_len);
 
-    if (ret != 0)
+    if (ret != 0 || payload == NULL || payload_len == 0)
         return;
 
-    awss_debug("%s\r\n", __func__);
+    id = json_get_value_by_name(payload, payload_len, AWSS_JSON_ID, &len, NULL);
+    if (id == NULL)
+        return;
+
+    if (id == NULL)
+        return;
+    reply_id = atoi(id);
+    if (reply_id + 1 < awss_report_id)
+        return;
+    awss_info("%s\r\n", __func__);
     awss_report_token_suc = 1;
     awss_stop_timer(report_token_timer);
     report_token_timer = NULL;
+    AWSS_DB_UPDATE_STATIS(AWSS_DB_STATIS_SUC);
+    AWSS_DB_DISP_STATIS();
     return;
 }
 
@@ -265,13 +282,15 @@ static int awss_report_token_to_cloud()
     if (awss_report_token_suc)  // success ,no need to report
         return 0;
 
+    AWSS_DB_UPDATE_STATIS(AWSS_DB_STATIS_START);
+
     /*
      * it is still failed after try to report token MATCH_REPORT_CNT_MAX times
      */
     if (awss_report_token_cnt ++ > MATCH_REPORT_CNT_MAX) {
         awss_stop_timer(report_token_timer);
         report_token_timer = NULL;
-        awss_debug("try %d times fail", awss_report_token_cnt);
+        awss_info("try %d times fail", awss_report_token_cnt);
         return -2;
     }
 
@@ -279,7 +298,7 @@ static int awss_report_token_to_cloud()
         report_token_timer = HAL_Timer_Create("rp_token", (void (*)(void *))awss_report_token_to_cloud, NULL);
     }
     HAL_Timer_Stop(report_token_timer);
-    HAL_Timer_Start(report_token_timer, MATCH_MONITOR_TIMEOUT_MS);
+     HAL_Timer_Start(report_token_timer, 3 * 1000);
 
     int packet_len = AWSS_REPORT_LEN_MAX;
 
@@ -316,7 +335,7 @@ static int awss_report_token_to_cloud()
     awss_build_topic(TOPIC_MATCH_REPORT, topic, TOPIC_LEN_MAX);
 
     int ret = awss_cmp_mqtt_send(topic, packet, packet_len, 1);
-    awss_debug("report token res:%d\r\n", ret);
+    awss_info("report token res:%d\r\n", ret);
     os_free(packet);
 
     return ret;

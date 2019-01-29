@@ -24,11 +24,11 @@
 #endif
 
 #ifndef CONFIG_MQTT_TX_MAXLEN
-    #define CONFIG_MQTT_TX_MAXLEN           (1024)
+    #define CONFIG_MQTT_TX_MAXLEN           (2048)
 #endif
 
 #ifndef CONFIG_MQTT_RX_MAXLEN
-    #define CONFIG_MQTT_RX_MAXLEN           (1024)
+    #define CONFIG_MQTT_RX_MAXLEN           (2048)
 #endif
 
 #ifndef CONFIG_SDK_THREAD_COST
@@ -49,6 +49,10 @@
 
 #ifndef CONFIG_DISPATCH_QUEUE_MAXLEN
     #define CONFIG_DISPATCH_QUEUE_MAXLEN    (50)
+#endif
+
+#ifndef CONFIG_DISPATCH_PACKET_MAXCOUNT
+    #define CONFIG_DISPATCH_PACKET_MAXCOUNT (0)
 #endif
 
 #ifndef CONFIG_MSGCACHE_QUEUE_MAXLEN

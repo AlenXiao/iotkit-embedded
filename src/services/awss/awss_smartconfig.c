@@ -8,6 +8,7 @@
 #include "awss_event.h"
 #include "awss_crypt.h"
 #include "awss_aplist.h"
+#include "awss_statis.h"
 #include "awss_smartconfig.h"
 #include "zconfig_ieee80211.h"
 #include "zconfig_protocol.h"
@@ -17,8 +18,7 @@ extern "C"
 {
 #endif
 
-//////////////////////////////////////////////////////////////////////////////////
-//following is broadcast protocol related code
+/* following is broadcast protocol related code */
 uint8_t is_start_frame(uint16_t len)
 {
     return (len == START_FRAME);
@@ -294,6 +294,7 @@ int zconfig_get_ssid_passwd(uint8_t tods)
         tods = tods_tmp;
         ret = -1;
         awss_event_post(AWSS_CS_ERR);
+        AWSS_UPDATE_STATIS(AWSS_STATIS_SM_IDX, AWSS_STATIS_TYPE_CRC_ERR);
         goto exit;
     }
 
@@ -328,9 +329,10 @@ int zconfig_get_ssid_passwd(uint8_t tods)
         do {  // amend SSID automatically
             struct ap_info *ap = NULL;
             ap = zconfig_get_apinfo(zc_bssid);
+            if (ap == NULL || ap->ssid[0] == '\0')
+                break;
 #if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-            if (ap == NULL || ap->ssid[0] == '\0' ||
-                strncmp(ap->ssid, zc_adha_ssid, ZC_MAX_SSID_LEN) == 0 ||
+            if (strncmp(ap->ssid, zc_adha_ssid, ZC_MAX_SSID_LEN) == 0 ||
                 strncmp(ap->ssid, zc_default_ssid, ZC_MAX_SSID_LEN) == 0) {
                 memset(zc_bssid, 0, ETH_ALEN);
                 break;
@@ -350,11 +352,13 @@ int zconfig_get_ssid_passwd(uint8_t tods)
         decode_chinese(pbuf, passwd_len, tmp, &passwd_cipher_len, 6);
         passwd_len = passwd_cipher_len;
         memset(zc_passwd, 0, ZC_MAX_PASSWD_LEN);
-        aes_decrypt_string((char *)tmp, (char *)zc_passwd, passwd_len, os_get_encrypt_type(), 0);
+        aes_decrypt_string((char *)tmp, (char *)zc_passwd, passwd_len,
+                1, os_get_encrypt_type(), 0, NULL);
         if (is_utf8((const char *)zc_passwd, passwd_len) == 0) {
             awss_trace("passwd err\r\n");
             memset(zconfig_data, 0, sizeof(*zconfig_data));
             awss_event_post(AWSS_PASSWD_ERR);
+            AWSS_UPDATE_STATIS(AWSS_STATIS_SM_IDX, AWSS_STATIS_TYPE_PASSWD_ERR);
             ret = -1;
             goto exit;
         }
@@ -511,7 +515,7 @@ found_match:
 
         if (ap_info && ap_info->encry[tods] == encry && ap_info->channel) {
             if (channel != ap_info->channel) {
-                awss_debug("fix channel from %d to %d\r\n", channel, ap_info->channel);
+                awss_info("fix channel from %d to %d\r\n", channel, ap_info->channel);
                 zc_channel = ap_info->channel;  // fix by ap_info channel
                 extern void aws_set_dst_chan(int channel);
                 aws_set_dst_chan(zc_channel);
@@ -777,42 +781,6 @@ int try_to_replace_same_pos(int tods, int pos, int new_len)
     return replace;
 }
 
-
-
-/*
- *    Note: if encry is set, goto encry_collision, because
- *    the way here we used to detection encry mode may mixed tkip & aes
- *    in some cases.
- */
-#define set_encry_type(encry, value, bssid, tods)    \
-do {\
-    if (encry != ZC_ENC_TYPE_INVALID) {\
-        awss_trace("%02x%02x%02x%02x%02x%02x, enc[%c]:%s<->%s!!!\r\n",\
-                bssid[0], bssid[1], bssid[2],\
-                bssid[3], bssid[4], bssid[5],\
-                flag_tods(tods),\
-                zconfig_encry_str(encry),\
-                zconfig_encry_str(value));\
-        goto encry_collision;\
-    } else {\
-        encry = (value);\
-    }\
-} while (0)
-
-#ifdef AWSS_SUPPORT_APLIST
-#define update_apinfo_encry_type(encry_type, bssid, tods)    \
-do {\
-    struct ap_info *ap_info = zconfig_get_apinfo(bssid);\
-    if (ap_info && (encry_type) != ap_info->encry[tods]) {\
-        awss_debug("ssid:%s, enc[%c]:%s->%s\r\n",\
-            ap_info->ssid, flag_tods(tods),\
-            zconfig_encry_str(ap_info->encry[tods]),\
-            zconfig_encry_str(encry_type));\
-        ap_info->encry[tods] = encry_type;\
-    }\
-} while (0)
-#endif
-
 int awss_ieee80211_smartconfig_process(uint8_t *ieee80211, int len, int link_type, struct parser_res *res, signed char rssi)
 {
     int hdrlen, fc, seq_ctrl;
@@ -884,18 +852,18 @@ int awss_ieee80211_smartconfig_process(uint8_t *ieee80211, int len, int link_typ
 #endif
         {
             if (!ieee80211_has_protected(fc)) {
-                set_encry_type(encry, ZC_ENC_TYPE_NONE, bssid_mac, tods);//open
+                encry = ZC_ENC_TYPE_NONE;
             } else {
                 /* Note: avoid empty null data */
                 if (len < 8)        //IV + ICV + DATA >= 8
                     return ALINK_INVALID;
                 if (!(ieee80211[3] & 0x3F)) {
-                    set_encry_type(encry, ZC_ENC_TYPE_WEP, bssid_mac, tods);//wep
+                    encry = ZC_ENC_TYPE_WEP;
                 } else if (data[3] & (1 << 5)) {//Extended IV
                     if (data[1] == ((data[0] | 0x20) & 0x7F)) //tkip, WEPSeed  = (TSC1 | 0x20 ) & 0x7F
-                        set_encry_type(encry, ZC_ENC_TYPE_TKIP, bssid_mac, tods);
+                        encry = ZC_ENC_TYPE_TKIP;
                     if (data[2] == 0 && (!(data[3] & 0x0F)))
-                        set_encry_type(encry, ZC_ENC_TYPE_AES, bssid_mac, tods);//ccmp
+                        encry = ZC_ENC_TYPE_AES;
 
                     /*
                      * Note: above code use if(tkip) and if(ase)
@@ -910,19 +878,26 @@ int awss_ieee80211_smartconfig_process(uint8_t *ieee80211, int len, int link_typ
     if (encry == ZC_ENC_TYPE_INVALID)
         awss_warn("invalid encry type!\r\n");
     res->u.br.encry_type = encry;
-    // apinfo's encry field updated only from beacon/probe resp frame
-    // update_apinfo_encry_type(encry, bssid_mac, tods);
-    return ALINK_BROADCAST;
 
-encry_collision:
-    // set encry type to invalid
-    res->u.br.encry_type = ZC_ENC_TYPE_INVALID;
+    /* convert IEEE 802.11 header + possible LLC headers into Ethernet header
+     * IEEE 802.11 address fields:
+     * ToDS FromDS Addr1 Addr2 Addr3 Addr4
+     *   0     0   DA    SA    BSSID n/a
+     *   0     1   DA    BSSID SA    n/a
+     *   1     0   BSSID SA    DA    n/a
+     *   1     1   RA    TA    DA    SA
+     */
+    res->src = ieee80211_get_SA(hdr);
+    res->dst = ieee80211_get_DA(hdr);
+    res->bssid = ieee80211_get_BSSID(hdr);
+    res->tods = ieee80211_has_tods(fc);
 
     return ALINK_BROADCAST;
 }
 
 int awss_recv_callback_smartconfig(struct parser_res *res)
 {
+    static char statis = 0;
     uint32_t timestamp = os_get_time_ms();
 
     uint8_t *src = res->src;
@@ -939,11 +914,10 @@ int awss_recv_callback_smartconfig(struct parser_res *res)
     uint8_t score = 0, timeout = 0, equal = 0;
 
     uint16_t pos = 0, index = 0;
-#if 0 
-    awss_debug("len=%d, %c, sn=%d, enc=%d, chn=%d, src=%02x%02x%02x%02x%02x%02x\r\n",
+
+    awss_flow("len=%d, %c, sn=%d, enc=%d, chn=%d, src=%02x%02x%02x%02x%02x%02x\r\n",
                len, flag_tods(tods), sn, encry_type, channel,
                src[0], src[1], src[2], src[3], src[4], src[5]);
-#endif
     /*
      * STATE_CHN_LOCKED_BY_P2P is set by v2 wps/action frame, which means
      * APP is sending v2, but if v2 is fail, APP will rollback to v1,
@@ -953,12 +927,16 @@ int awss_recv_callback_smartconfig(struct parser_res *res)
     if (zc_state == STATE_CHN_LOCKED_BY_P2P ||
         zc_state == STATE_CHN_SCANNING) {
         if (is_hint_frame(encry_type, len, bssid, src, channel, tods, sn)) {
+            if (statis == 0) {
+                statis = 1;
+                AWSS_UPDATE_STATIS(AWSS_STATIS_SM_IDX, AWSS_STATIS_TYPE_TIME_START);
+            }
             awss_trace("hint frame: offset:%d, %c, sn:%x\r\n",
-                      zc_frame_offset, flag_tods(tods), sn);
+                       zc_frame_offset, flag_tods(tods), sn);
 
             awss_trace("src:%02x%02x%02x%02x%02x%02x, bssid:%02x%02x%02x%02x%02x%02x\r\n",
-                      src[0], src[1], src[2], src[3], src[4], src[5],
-                      bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+                       src[0], src[1], src[2], src[3], src[4], src[5],
+                       bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 
             pkg_type = PKG_START_FRAME;
             zconfig_set_state(STATE_CHN_LOCKED_BY_BR, tods, channel);
@@ -973,8 +951,8 @@ int awss_recv_callback_smartconfig(struct parser_res *res)
                 }
                 memcpy(zc_android_bssid, bssid, ETH_ALEN);
                 awss_trace("src %02x%02x%02x match %02x%02x%02x\r\n",
-                          zc_android_src[0], zc_android_src[1], zc_android_src[2],
-                          zc_android_bssid[0], zc_android_bssid[1], zc_android_bssid[2]);
+                           zc_android_src[0], zc_android_src[1], zc_android_src[2],
+                           zc_android_bssid[0], zc_android_bssid[1], zc_android_bssid[2]);
             }
 #endif
         }
@@ -1053,11 +1031,6 @@ pos_unsync:
                 }
                 zc_pos_unsync ++; /* unsync pkg counter */
                 awss_trace("\tX+%d [%d] %-3x %c %-3x\r\n", index, tmp_score(index), sn, flag_tods(tods), len);
-                if (zc_pos_unsync > 3) {
-                    zc_pos_unsync = 0;
-                    zconfig_force_rescan();
-                    goto drop;
-                }
                 goto update_sn;//FIXME: update prev_sn or not?
             }
 
@@ -1110,7 +1083,7 @@ pos_unsync:
 
         /* start from pkg(1), leave pkg(0) for start frame */
         if (pos >= MAX_PKG_NUMS || pos <= 0) {
-            awss_debug("msg index(%d) out of range!\r\n", pos);
+            awss_warn("msg index(%d) out of range!\r\n", pos);
             goto drop;
         }
 
@@ -1181,6 +1154,8 @@ is_recv_completed:
             memcpy(zc_bssid, res->bssid, ETH_ALEN);
             if (!zconfig_get_ssid_passwd(tods)) {
                 /* we got it! */
+                AWSS_UPDATE_STATIS(AWSS_STATIS_SM_IDX, AWSS_STATIS_TYPE_TIME_SUC);
+                statis = 0;
                 zconfig_set_state(STATE_RCV_DONE, tods, channel);
                 return PKG_END;
             }

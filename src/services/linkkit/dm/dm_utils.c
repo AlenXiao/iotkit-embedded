@@ -12,7 +12,7 @@ int dm_utils_copy_direct(_IN_ void *input, _IN_ int input_len, _OU_ void **outpu
         return DM_INVALID_PARAMETER;
     }
 
-    *output = malloc(output_len);
+    *output = HAL_Malloc(output_len);
     if (*output == NULL) {
         return DM_MEMORY_NOT_ENOUGH;
     }
@@ -112,7 +112,7 @@ int dm_utils_itoa_direct(_IN_ int input, _OU_ char **output)
         return FAIL_RETURN;
     }
 
-    *output = malloc(strlen(temp_output) + 1);
+    *output = HAL_Malloc(strlen(temp_output) + 1);
     if (*output == NULL) {
         return DM_MEMORY_NOT_ENOUGH;
     }
@@ -160,7 +160,7 @@ int dm_utils_ftoa_direct(_IN_ double input, _OU_ char **output)
         return FAIL_RETURN;
     }
 
-    *output = malloc(strlen(temp_output) + 1);
+    *output = HAL_Malloc(strlen(temp_output) + 1);
     if (*output == NULL) {
         return DM_MEMORY_NOT_ENOUGH;
     }
@@ -335,6 +335,27 @@ int dm_utils_service_name(_IN_ const char *prefix, _IN_ const char *name, _IN_ c
     return SUCCESS_RETURN;
 }
 
+int dm_utils_uri_add_prefix(_IN_ const char *prefix, _IN_ char *uri, _OU_ char **new_uri)
+{
+    int new_uri_len = 0;
+
+    if (prefix == NULL || uri == NULL || new_uri == NULL || *new_uri != NULL) {
+        return DM_INVALID_PARAMETER;
+    }
+
+    new_uri_len = strlen(prefix) + strlen(uri) + 1;
+    *new_uri = DM_malloc(new_uri_len);
+    if (*new_uri == NULL) {
+        return DM_MEMORY_NOT_ENOUGH;
+    }
+    memset(*new_uri, 0, new_uri_len);
+
+    memcpy(*new_uri, prefix, strlen(prefix));
+    memcpy(*new_uri + strlen(*new_uri), uri, strlen(uri));
+
+    return SUCCESS_RETURN;
+}
+
 int dm_utils_json_parse(_IN_ const char *payload, _IN_ int payload_len, _IN_ int type, _OU_ lite_cjson_t *lite)
 {
     int res = 0;
@@ -362,7 +383,6 @@ int dm_utils_json_object_item(_IN_ lite_cjson_t *lite, _IN_ const char *key, _IN
                               _OU_ lite_cjson_t *lite_item)
 {
     int res = 0;
-
     if (lite == NULL || lite->type != cJSON_Object || key == NULL || key_len <= 0 || type < 0 || lite_item == NULL) {
         return DM_INVALID_PARAMETER;
     }
@@ -375,7 +395,6 @@ int dm_utils_json_object_item(_IN_ lite_cjson_t *lite, _IN_ const char *key, _IN
 
     res = lite_cjson_object_item(lite, key, key_len, lite_item);
     if (res != SUCCESS_RETURN) {
-        /* dm_log_err(DM_UTILS_LOG_JSON_PARSE_FAILED, lite->value_length, lite->value); */
         memset(lite_item, 0, sizeof(lite_cjson_t));
         return FAIL_RETURN;
     }
@@ -390,10 +409,10 @@ int dm_utils_json_object_item(_IN_ lite_cjson_t *lite, _IN_ const char *key, _IN
 
 void *dm_utils_malloc(unsigned int size)
 {
-    return DM_malloc(size);
+    return LITE_malloc(size, MEM_MAGIC, "lite_cjson");
 }
 
 void dm_utils_free(void *ptr)
 {
-    DM_free(ptr);
+    LITE_free(ptr);
 }

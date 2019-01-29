@@ -3,13 +3,27 @@
  */
 
 
-
-
 #ifndef _IOTX_COMMON_SHA1_H_
 #define _IOTX_COMMON_SHA1_H_
 
 #include "iot_import.h"
 
+#ifdef BUILD_AOS
+
+#include "mbedtls/sha1.h"
+
+#define iot_sha1_context        mbedtls_sha1_context
+
+#define utils_sha1_init         mbedtls_sha1_init
+#define utils_sha1_free         mbedtls_sha1_free
+#define utils_sha1_clone        mbedtls_sha1_clone
+#define utils_sha1_starts       mbedtls_sha1_starts
+#define utils_sha1_update       mbedtls_sha1_update
+#define utils_sha1_finish       mbedtls_sha1_finish
+#define utils_sha1_process      mbedtls_sha1_process
+#define utils_sha1              mbedtls_sha1
+
+#else
 
 /**
  * \brief          SHA-1 context structure
@@ -78,5 +92,7 @@ void utils_sha1_process(iot_sha1_context *ctx, const unsigned char data[64]);
  * \param output   SHA-1 checksum result
  */
 void utils_sha1(const unsigned char *input, size_t ilen, unsigned char output[20]);
+
+#endif
 
 #endif

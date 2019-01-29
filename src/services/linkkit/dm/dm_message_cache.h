@@ -3,7 +3,7 @@
  */
 
 
-
+#if !defined(DM_MESSAGE_CACHE_DISABLED)
 #ifndef _DM_MESSAGE_CACHE_H_
 #define _DM_MESSAGE_CACHE_H_
 
@@ -33,4 +33,5 @@ int dm_msg_cache_search(_IN_ int msg_id, _OU_ dm_msg_cache_node_t **node);
 int dm_msg_cache_remove(int msg_id);
 void dm_msg_cache_tick(void);
 
+#endif
 #endif

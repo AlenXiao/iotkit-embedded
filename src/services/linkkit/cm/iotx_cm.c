@@ -1,8 +1,15 @@
 #include "iot_import.h"
 #include "iotx_cm.h"
 #include "iotx_cm_internal.h"
-#include "iotx_cm_mqtt.h"
 #include "iot_export_event.h"
+
+#if defined(MQTT_COMM_ENABLED) || defined(MAL_ENABLED) 
+#include "iotx_cm_mqtt.h"
+#endif
+#ifdef COAP_COMM_ENABLED
+#include "iotx_cm_coap.h"
+#endif
+
 
 static void *fd_lock = NULL;
 static iotx_cm_connection_t *_cm_fd[CM_MAX_FD_NUM] = {NULL};
@@ -27,8 +34,15 @@ int iotx_cm_open(iotx_cm_init_param_t *params)
 
     switch (params->protocol_type) {
         case IOTX_CM_PROTOCOL_TYPE_MQTT:
+#if defined(MQTT_COMM_ENABLED) || defined(MAL_ENABLED)
             connection = iotx_cm_open_mqtt(params);
+#endif
             break;
+        case IOTX_CM_PROTOCOL_TYPE_COAP:
+#ifdef COAP_COMM_ENABLED
+            connection = iotx_cm_open_coap(params);
+#endif
+            break;            
         default:
             CM_WARN("protocol %d not support yet", params->protocol_type);
             break;
@@ -199,6 +213,7 @@ int iotx_cm_close(int fd)
         while (!yield_task_leave) {
             HAL_SleepMs(10);
         }
+        HAL_ThreadDelete(yield_thread);
 #endif
     }
 
@@ -219,6 +234,7 @@ int iotx_cm_close(int fd)
             fd_lock = NULL;
         }
     }
+
     return 0;
 }
 

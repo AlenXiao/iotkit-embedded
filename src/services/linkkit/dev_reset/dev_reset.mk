@@ -1,10 +1,14 @@
 NAME := libdev_reset
 
+$(NAME)_MBINS_TYPE := kernel
+$(NAME)_VERSION := 2.3.0
+$(NAME)_SUMMARY :=
+
 $(NAME)_DEFINES := USE_LPTHREAD
 
 $(NAME)_INCLUDES += .
 $(NAME)_SOURCES :=
-$(NAME)_SOURCES += awss_reset.c
+$(NAME)_SOURCES += awss_reset.c awss_reset_statis.c
 
 $(NAME)_DEFINES += DEBUG
 

@@ -5,6 +5,11 @@
 #include "iot_import.h"
 #include "awss_cmp.h"
 #include "awss_notify.h"
+#include "awss_bind_statis.h"
+
+#ifdef WIFI_PROVISION_ENABLED
+#include "awss_statis.h"
+#endif
 
 #ifdef DEVICE_MODEL_ENABLED
 #include "awss_reset.h"
@@ -33,7 +38,7 @@ int awss_report_cloud()
 #endif
     awss_report_token();
 
-    awss_cmp_local_init();
+    awss_cmp_local_init(AWSS_LC_INIT_BIND);
     awss_dev_bind_notify_stop();
     awss_dev_bind_notify();
 #ifdef WIFI_PROVISION_ENABLED
@@ -41,7 +46,11 @@ int awss_report_cloud()
     extern void awss_registrar_init(void);
     awss_registrar_init();
 #endif
+    AWSS_DISP_STATIS();
+    AWSS_REPORT_STATIS("RDA5981");
 #endif
+    AWSS_DB_DISP_STATIS();
+    AWSS_DB_REPORT_STATIS("RDA5981");
     HAL_MutexUnlock(awss_bind_mutex);
     return 0;
 }
@@ -65,7 +74,9 @@ int awss_bind_deinit()
     extern void awss_registrar_deinit(void);
     awss_registrar_deinit();
 #endif
+    AWSS_CLEAR_STATIS();
 #endif
+    AWSS_DB_CLEAR_STATIS();
 
     if (awss_bind_mutex) {
         HAL_MutexUnlock(awss_bind_mutex);

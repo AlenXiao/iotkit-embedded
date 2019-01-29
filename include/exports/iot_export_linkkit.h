@@ -2,10 +2,12 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #ifndef _IOT_EXPORT_LINKKIT_H_
 #define _IOT_EXPORT_LINKKIT_H_
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 #include "iot_export.h"
 
@@ -137,6 +139,8 @@ DLL_IOT_API int IOT_Linkkit_Report(int devid, iotx_linkkit_msg_type_t msg_type, 
  *        ITM_MSG_QUERY_TOPOLIST
  *        ITM_MSG_QUERY_FOTA_DATA
  *        ITM_MSG_QUERY_COTA_DATA
+ *        ITM_MSG_REQUEST_COTA
+ *        ITM_MSG_REQUEST_FOTA_IMAGE
  *
  * @param payload. message payload.
  * @param payload_len. message payload length.
@@ -161,4 +165,15 @@ DLL_IOT_API int IOT_Linkkit_Query(int devid, iotx_linkkit_msg_type_t msg_type, u
  */
 DLL_IOT_API int IOT_Linkkit_TriggerEvent(int devid, char *eventid, int eventid_len, char *payload, int payload_len);
 
+#ifdef LOG_REPORT_TO_CLOUD
+    int check_target_msg(const char *input, int len);
+    void get_msgid(char *payload, int is_cloud);
+    void send_permance_info(char *input, int input_len, char *comments, int report_format);
+#endif
+
+
+
+#if defined(__cplusplus)
+}
+#endif
 #endif
