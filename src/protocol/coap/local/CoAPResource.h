@@ -18,7 +18,6 @@ extern "C" {
 
 #define COAP_MAX_PATH_CHECKSUM_LEN (5)
 
-
 typedef struct {
     unsigned short           permission;
     CoAPRecvMsgHandler       callback;

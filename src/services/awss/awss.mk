@@ -19,6 +19,14 @@ ifeq ($(CONFIG_SYSINFO_DEVICE_NAME), ESP8266)
 GLOBAL_DEFINES += ESP8266_CONFIG
 endif
 
+#
+# If chipset or die set doesn't need to support statistic of AWSS,
+# please remove the defination of AWSS_SUPPORT_STATIS
+#
+ifneq ($(CONFIG_SYSINFO_DEVICE_NAME), DH5021A)
+GLOBAL_DEFINES += AWSS_SUPPORT_STATIS
+endif
+
 $(NAME)_DEFINES += DEBUG
 GLOBAL_DEFINES += CONFIG_YWSS
 #GLOBAL_DEFINES += DEV_BIND_TEST

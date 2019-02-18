@@ -11,14 +11,13 @@
 #include "zconfig_lib.h"
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
-extern "C"
-{
+extern "C" {
 #endif
 
 enum state_machine {
     STATE_CHN_SCANNING,
-    STATE_CHN_LOCKED_BY_P2P,  // wps/action used for enrollee
-    STATE_CHN_LOCKED_BY_BR,   // broadcast used for smartconfig
+    STATE_CHN_LOCKED_BY_P2P,  /* wps/action used for enrollee */
+    STATE_CHN_LOCKED_BY_BR,   /* broadcast used for smartconfig */
     STATE_GOT_BEACON,
     STATE_RCV_IN_PROGRESS,
     STATE_RCV_COMPLETE,
@@ -49,10 +48,7 @@ enum passwd_encpyt_type {
 
 #define ZC_MAX_CHANNEL            (14)
 #define ZC_MIN_CHANNEL            (1)
-static inline int zconfig_is_valid_channel(int channel)
-{
-    return (ZC_MIN_CHANNEL <= channel && channel <= ZC_MAX_CHANNEL);
-}
+int zconfig_is_valid_channel(int channel);
 
 #define P2P_ENCODE_TYPE_OFFSET    (0x05)
 #define P2P_SSID_LEN_MASK         ((1 << P2P_ENCODE_TYPE_OFFSET) - 1)
@@ -100,7 +96,7 @@ struct zconfig_data {
         uint16_t prev_sn;       /* last sn */
         uint16_t last_len;      /* len pkg len */
         uint32_t timestamp;     /* last timestamp */
-#define time_interval             (300)    //ms
+#define time_interval             (300)    /* ms */
     } data[2];
 
     /* package store */

@@ -2,8 +2,6 @@
  * Copyright (C) 2015-2018 Alibaba Group Holding Limited
  */
 
-
-
 #include "CoAPExport.h"
 #include "CoAPResource.h"
 #include "CoAPObserve.h"
@@ -64,25 +62,25 @@ int CoAPObsServer_add(CoAPContext *context, const char *path, NetworkAddr *remot
 
     ret = CoAPUintOption_get(request, COAP_OPTION_OBSERVE,  &observe);
 
-    if(NULL!=resource && COAP_SUCCESS==ret && 0==observe){
+    if (NULL != resource && COAP_SUCCESS == ret && 0 == observe) {
         /*Check if the observe client already exist*/
         HAL_MutexLock(ctx->obsserver.list_mutex);
         list_for_each_entry(node, &ctx->obsserver.list, obslist, CoapObserver) {
-            if((node->p_resource_of_interest == resource) &&
+            if ((node->p_resource_of_interest == resource) &&
                 (node->remote.port == remote->port)  &&
-                (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))){
-                    COAP_DEBUG("The observe client %s:%d already exist,update it", node->remote.addr, node->remote.port);
-                    memcpy(node->token, request->token, request->header.tokenlen);
-                    node->tokenlen = request->header.tokenlen;
-                    HAL_MutexUnlock(ctx->obsserver.list_mutex);
-                    return COAP_ERROR_OBJ_ALREADY_EXIST;
-                }
+                (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))) {
+                COAP_DEBUG("The observe client %s:%d already exist,update it", node->remote.addr, node->remote.port);
+                memcpy(node->token, request->token, request->header.tokenlen);
+                node->tokenlen = request->header.tokenlen;
+                HAL_MutexUnlock(ctx->obsserver.list_mutex);
+                return COAP_ERROR_OBJ_ALREADY_EXIST;
+            }
         }
         HAL_MutexUnlock(ctx->obsserver.list_mutex);
 
 
         obs = coap_malloc(sizeof(CoapObserver));
-        if(NULL == obs){
+        if (NULL == obs) {
             COAP_ERR("Allocate memory failed");
             return COAP_ERROR_MALLOC;
         }
@@ -96,11 +94,11 @@ int CoAPObsServer_add(CoAPContext *context, const char *path, NetworkAddr *remot
 
 
         CoAPUintOption_get(request, COAP_OPTION_ACCEPT, &acceptype);
-        obs->ctype = (acceptype==0) ? COAP_CT_APP_JSON : acceptype;
+        obs->ctype = (acceptype == 0) ? COAP_CT_APP_JSON : acceptype;
         obs->observer_sequence_num = 0;
 
-        // TODO:
-        //CoAPObsServer_find();
+        /* TODO: */
+        /* CoAPObsServer_find(); */
 
         HAL_MutexLock(ctx->obsserver.list_mutex);
         if (ctx->obsserver.count >= ctx->obsserver.maxcount) {
@@ -122,23 +120,23 @@ int CoAPObsServer_add(CoAPContext *context, const char *path, NetworkAddr *remot
 }
 
 
-int CoapObsServer_delete(CoAPContext *context,          NetworkAddr  *remote,
-                                      CoAPResource *resource)
+int CoapObsServer_delete(CoAPContext *context,  NetworkAddr  *remote,
+                         CoAPResource *resource)
 {
     CoapObserver *node = NULL, *next = NULL;
     CoAPIntContext *ctx = (CoAPIntContext *)context;
 
     HAL_MutexLock(ctx->obsserver.list_mutex);
     list_for_each_entry_safe(node, next, &ctx->obsserver.list, obslist, CoapObserver) {
-        if((node->p_resource_of_interest == resource) &&
-                (node->remote.port == remote->port)  &&
-                (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))){
-                    ctx->obsserver.count --;
-                    list_del(&node->obslist);
-                    COAP_DEBUG("Delete %s:%d from observe server", node->remote.addr, node->remote.port);
-                    coap_free(node);
-                    break;
-                }
+        if ((node->p_resource_of_interest == resource) &&
+            (node->remote.port == remote->port)  &&
+            (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))) {
+            ctx->obsserver.count --;
+            list_del(&node->obslist);
+            COAP_DEBUG("Delete %s:%d from observe server", node->remote.addr, node->remote.port);
+            coap_free(node);
+            break;
+        }
     }
     HAL_MutexUnlock(ctx->obsserver.list_mutex);
 
@@ -152,13 +150,13 @@ int CoapObsServerAll_delete(CoAPContext *context,          NetworkAddr  *remote)
 
     HAL_MutexLock(ctx->obsserver.list_mutex);
     list_for_each_entry_safe(node, next, &ctx->obsserver.list, obslist, CoapObserver) {
-        if(NULL != node && (node->remote.port == remote->port)  &&
-         (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))){
-                  ctx->obsserver.count --;
-                  list_del(&node->obslist);
-                  COAP_DEBUG("Delete %s:%d from observe server, cur observe count %d",
-                    node->remote.addr, node->remote.port, ctx->obsserver.count);
-                  coap_free(node);
+        if (NULL != node && (node->remote.port == remote->port)  &&
+            (0 == memcmp(node->remote.addr, remote->addr, NETWORK_ADDR_LEN))) {
+            ctx->obsserver.count --;
+            list_del(&node->obslist);
+            COAP_DEBUG("Delete %s:%d from observe server, cur observe count %d",
+                       node->remote.addr, node->remote.port, ctx->obsserver.count);
+            coap_free(node);
         }
     }
     HAL_MutexUnlock(ctx->obsserver.list_mutex);
@@ -167,9 +165,8 @@ int CoapObsServerAll_delete(CoAPContext *context,          NetworkAddr  *remote)
 }
 
 
-int CoAPObsServer_notify(CoAPContext *context,
-                            const char *path, unsigned char *payload,
-                            unsigned short payloadlen, CoAPDataEncrypt handler)
+int CoAPObsServer_notify(CoAPContext *context, const char *path, unsigned char *payload,
+                         unsigned short payloadlen, CoAPDataEncrypt handler)
 {
     unsigned int ret  = COAP_SUCCESS;
     CoAPResource *resource = NULL;
@@ -180,10 +177,10 @@ int CoAPObsServer_notify(CoAPContext *context,
 
     resource = CoAPResourceByPath_get(ctx, path);
 
-    if(NULL != resource){
+    if (NULL != resource) {
         HAL_MutexLock(ctx->obsserver.list_mutex);
         list_for_each_entry(node, &ctx->obsserver.list, obslist, CoapObserver) {
-            if(node->p_resource_of_interest == resource){
+            if (node->p_resource_of_interest == resource) {
                 CoAPMessage message;
                 CoAPMessage_init(&message);
                 CoAPMessageType_set(&message, node->msg_type);
@@ -196,24 +193,23 @@ int CoAPObsServer_notify(CoAPContext *context,
                 CoAPUintOption_add(&message, COAP_OPTION_CONTENT_FORMAT, node->ctype);
                 CoAPUintOption_add(&message, COAP_OPTION_MAXAGE, resource->maxage);
                 COAP_DEBUG("Send notify message path %s to remote %s:%d ",
-                                        path, node->remote.addr, node->remote.port);
+                           path, node->remote.addr, node->remote.port);
 
                 memset(&dest, 0x00, sizeof(CoAPLenString));
-                if(NULL != handler){
+                if (NULL != handler) {
                     src.len = payloadlen;
                     src.data = payload;
                     ret = handler(context, path, &node->remote, &message, &src, &dest);
-                    if(COAP_SUCCESS == ret){
+                    if (COAP_SUCCESS == ret) {
                         CoAPMessagePayload_set(&message, dest.data, dest.len);
-                    }else{
+                    } else {
                         COAP_INFO("Encrypt payload failed");
                     }
-                }
-                else{
+                } else {
                     CoAPMessagePayload_set(&message, payload, payloadlen);
                 }
                 ret = CoAPMessage_send(ctx, &node->remote, &message);
-                if(NULL != handler && 0 != dest.len && NULL != dest.data){
+                if (NULL != handler && 0 != dest.len && NULL != dest.data) {
                     coap_free(dest.data);
                     dest.len = 0;
                 }
@@ -246,7 +242,7 @@ int CoAPObsClient_init(CoAPContext *context, unsigned char        obs_maxcount)
 
 int CoAPObsClient_deinit(CoAPContext *context)
 {
-    CoAPObservable *node = NULL, *next=  NULL;
+    CoAPObservable *node = NULL, *next = NULL;
     CoAPIntContext *ctx = (CoAPIntContext *)context;
 
     HAL_MutexLock(ctx->obsclient.list_mutex);
@@ -265,23 +261,22 @@ int CoAPObsClient_deinit(CoAPContext *context)
 
 int CoAPObsClient_add(CoAPContext *context, CoAPMessage *message, NetworkAddr *remote, CoAPSendNode *sendnode)
 {
-    CoAPObservable *node = NULL, *next=  NULL;
+    CoAPObservable *node = NULL, *next = NULL;
     CoAPIntContext *ctx = (CoAPIntContext *)context;
 
-    if(COAP_SUCCESS == CoAPOption_present(message, COAP_OPTION_OBSERVE)){
+    if (COAP_SUCCESS == CoAPOption_present(message, COAP_OPTION_OBSERVE)) {
         COAP_DEBUG("There is Observe option in message, handle it");
-        if(NULL == sendnode){ // Not the first response
+        if (NULL == sendnode) { /* Not the first response */
 
             HAL_MutexLock(ctx->obsclient.list_mutex);
             list_for_each_entry(node, &ctx->obsclient.list, obslist, CoAPObservable) {
-                if(0 != node->tokenlen && node->tokenlen == message->header.tokenlen
-                    && 0 == memcmp(node->token, message->token, node->tokenlen)){
+                if (0 != node->tokenlen && node->tokenlen == message->header.tokenlen
+                    && 0 == memcmp(node->token, message->token, node->tokenlen)) {
                     CoAPUintOption_get(message, COAP_OPTION_MAXAGE, &node->max_age);
-                    if(NULL != node->callback){
+                    if (NULL != node->callback) {
                         COAP_DEBUG("Call the observe client callback %p", node->callback);
                         node->callback(ctx, COAP_REQUEST_SUCCESS, node->userdata, remote, message);
-                    }
-                    else{
+                    } else {
                         COAP_INFO("The observe client callback is NULL");
                     }
                     break;
@@ -289,20 +284,19 @@ int CoAPObsClient_add(CoAPContext *context, CoAPMessage *message, NetworkAddr *r
             }
             HAL_MutexUnlock(ctx->obsclient.list_mutex);
 
-        }
-        else{
+        } else {
             int found = 0;
             HAL_MutexLock(ctx->obsclient.list_mutex);
             list_for_each_entry(node, &ctx->obsclient.list, obslist, CoAPObservable) {
-                if(0 != node->tokenlen && node->tokenlen == message->header.tokenlen
-                    && 0 == memcmp(node->token, message->token, node->tokenlen)){
+                if (0 != node->tokenlen && node->tokenlen == message->header.tokenlen
+                    && 0 == memcmp(node->token, message->token, node->tokenlen)) {
                     found = 1;
                     break;
                 }
             }
-            if(!found && ctx->obsclient.count < ctx->obsclient.maxcount){
+            if (!found && ctx->obsclient.count < ctx->obsclient.maxcount) {
                 CoAPObservable *newnode = coap_malloc(sizeof(CoAPObservable));
-                if(NULL != newnode){
+                if (NULL != newnode) {
                     memset(newnode, 0x00, sizeof(CoAPObservable));
                     newnode->tokenlen = message->header.tokenlen;
                     memcpy(newnode->token, message->token, message->header.tokenlen);
@@ -314,18 +308,16 @@ int CoAPObsClient_add(CoAPContext *context, CoAPMessage *message, NetworkAddr *r
                     ctx->obsclient.count ++;
                     COAP_DEBUG("Add a new obsclient");
                 }
-            }
-            else{
+            } else {
                 COAP_INFO("Cur have %d obsclient, max allow %d", ctx->obsclient.count, ctx->obsclient.maxcount);
             }
             HAL_MutexUnlock(ctx->obsclient.list_mutex);
         }
-    }
-    else{
+    } else {
         HAL_MutexLock(ctx->obsclient.list_mutex);
         list_for_each_entry_safe(node, next, &ctx->obsclient.list, obslist, CoAPObservable) {
-            if(0 != node->tokenlen && node->tokenlen == message->header.tokenlen
-                && 0 == memcmp(node->token, message->token, node->tokenlen)){
+            if (0 != node->tokenlen && node->tokenlen == message->header.tokenlen
+                && 0 == memcmp(node->token, message->token, node->tokenlen)) {
                 list_del(&node->obslist);
                 ctx->obsclient.count --;
                 coap_free(node);
@@ -346,17 +338,17 @@ int CoAPObsClient_delete(CoAPContext *context, CoAPMessage *message)
     CoAPObservable *node = NULL, *next = NULL;
     CoAPIntContext *ctx = (CoAPIntContext *)context;
 
-    if(NULL == ctx || NULL == message){
+    if (NULL == ctx || NULL == message) {
         return COAP_ERROR_INVALID_PARAM;
     }
-    if(COAP_MSG_CODE_GET == message->header.code){
-        if(COAP_SUCCESS == CoAPOption_present(message, COAP_OPTION_OBSERVE)){
+    if (COAP_MSG_CODE_GET == message->header.code) {
+        if (COAP_SUCCESS == CoAPOption_present(message, COAP_OPTION_OBSERVE)) {
             ret = CoAPUintOption_get(message, COAP_OPTION_OBSERVE, &observe_option);
-            if(COAP_SUCCESS == ret && 1 == observe_option){
+            if (COAP_SUCCESS == ret && 1 == observe_option) {
                 HAL_MutexLock(ctx->obsclient.list_mutex);
                 list_for_each_entry_safe(node, next, &ctx->obsclient.list, obslist, CoAPObservable) {
-                    if(0 != node->tokenlen && node->tokenlen == message->header.tokenlen
-                        && 0 == memcmp(node->token, message->token, node->tokenlen)){
+                    if (0 != node->tokenlen && node->tokenlen == message->header.tokenlen
+                        && 0 == memcmp(node->token, message->token, node->tokenlen)) {
                         list_del(&node->obslist);
                         ctx->obsclient.count --;
                         coap_free(node);

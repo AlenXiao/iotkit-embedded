@@ -35,7 +35,7 @@ static int awss_dev_ap_setup()
     char ssid[PLATFORM_MAX_SSID_LEN + 1] = {0};
     char passwd[PLATFORM_MAX_PASSWD_LEN + 1] = {0};
 
-    do {  // reduce stack used
+    do {  /* reduce stack used */
         char pk[OS_PRODUCT_KEY_LEN + 1] = {0};
         char mac_str[OS_MAC_LEN + 1] = {0};
 
@@ -44,7 +44,7 @@ static int awss_dev_ap_setup()
         memcpy(mac_str + 11, mac_str + 12, 2);
         memcpy(mac_str + 13, mac_str + 15, 2);
         mac_str[15] = '\0';
-        snprintf(ssid, PLATFORM_MAX_SSID_LEN, "adh_%s_%s", pk, &mac_str[9]);
+        HAL_Snprintf(ssid, PLATFORM_MAX_SSID_LEN, "adh_%s_%s", pk, &mac_str[9]);
     } while (0);
 
     awss_trace("ssid:%s\n", ssid);
@@ -57,14 +57,14 @@ int awss_dev_ap_start(void)
     int ret = -1;
 
     if (g_awss_dev_ap_mutex || awss_dev_ap_ongoing) {
-        awss_trace("dev ap already running");
+        awss_warn("dev ap exist");
         return -1;
     }
 
     if (g_awss_dev_ap_mutex == NULL)
         g_awss_dev_ap_mutex = HAL_MutexCreate();
     if (g_awss_dev_ap_mutex == NULL) {
-        awss_trace("awss dev ap start fail");
+        awss_err("awss dev ap start fail");
         goto AWSS_DEV_AP_FAIL;
     }
 
@@ -75,11 +75,11 @@ int awss_dev_ap_start(void)
     awss_dev_ap_switchap_resp_suc = 0;
 
     ret = awss_dev_ap_setup();
-    os_msleep(1000);  // wait for dev ap to work well
+    awss_msleep(1000);  /* wait for dev ap to work well */
     awss_cmp_local_init(AWSS_LC_INIT_DEV_AP);
 
     while (awss_dev_ap_ongoing) {
-        os_msleep(200);
+        awss_msleep(200);
         if (awss_dev_ap_switchap_done)
             break;
     }
@@ -87,8 +87,8 @@ int awss_dev_ap_start(void)
 
     ret = awss_dev_ap_switchap_done == 0 ? -1 : 0;
 
-    if (awss_dev_ap_ongoing == 0) {  // interrupt by user
-        os_msleep(1000);
+    if (awss_dev_ap_ongoing == 0) {  /* interrupt by user */
+        awss_msleep(1000);
         return -1;
     }
 
@@ -164,10 +164,10 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
 
     AWSS_UPDATE_STATIS(AWSS_STATIS_DAP_IDX, AWSS_STATIS_TYPE_TIME_START);
 
-    msg = os_zalloc(AWSS_DEV_AP_SWITCHA_RSP_LEN);
+    msg = awss_zalloc(AWSS_DEV_AP_SWITCHA_RSP_LEN);
     if (msg == NULL)
         goto DEV_AP_SWITCHAP_END;
-    dev_info = os_zalloc(AWSS_DEV_AP_SWITCHA_RSP_LEN);
+    dev_info = awss_zalloc(AWSS_DEV_AP_SWITCHA_RSP_LEN);
     if (dev_info == NULL)
         goto DEV_AP_SWITCHAP_END;
 
@@ -185,7 +185,7 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
         awss_build_dev_info(AWSS_NOTIFY_DEV_BIND_TOKEN, dev_info + 1, AWSS_DEV_AP_SWITCHA_RSP_LEN - 1);
         dev_info[strlen(dev_info)] = '}';
         dev_info[AWSS_DEV_AP_SWITCHA_RSP_LEN - 1] = '\0';
-        snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, 200, dev_info);
+        HAL_Snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, 200, dev_info);
 
         str_len = 0;
         str = json_get_value_by_name(buf, len, "ssid", &str_len, 0);
@@ -206,7 +206,7 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
                 memcpy(ssid, (const char *)decoded, len);
                 ssid[len] = '\0';
             } else {
-                snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -1, "\"ssid error\"");
+                HAL_Snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -1, "\"ssid error\"");
                 success = 0;
                 break;
             }
@@ -217,7 +217,7 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
         if (str && str_len ==  RANDOM_MAX_LEN * 2) {
             utils_str_to_hex(str, str_len, (unsigned char *)random, RANDOM_MAX_LEN);
         } else {
-            snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -4, "\"random len error\"");
+            HAL_Snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -4, "\"random len error\"");
             success = 0;
             break;
         }
@@ -233,22 +233,22 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
             char encoded[PLATFORM_MAX_PASSWD_LEN * 2 + 1] = {0};
             memcpy(encoded, str, str_len);
             aes_decrypt_string(encoded, passwd, str_len,
-                    0, os_get_encrypt_type(), 1, random); // 64bytes=2x32bytes
+                    0, os_get_encrypt_type(), 1, random); /* 64bytes=2x32bytes */
         } else {
-            snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -3, "\"passwd len error\"");
+            HAL_Snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -3, "\"passwd len error\"");
             success = 0;
             AWSS_UPDATE_STATIS(AWSS_STATIS_DAP_IDX, AWSS_STATIS_TYPE_PASSWD_ERR);
         }
 
         if (success && is_utf8(passwd, strlen(passwd)) == 0) {
-            snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -3 , "\"passwd content error\"");
+            HAL_Snprintf(msg, AWSS_DEV_AP_SWITCHA_RSP_LEN, AWSS_ACK_FMT, req_msg_id, -3 , "\"passwd content error\"");
             success = 0;
             AWSS_UPDATE_STATIS(AWSS_STATIS_DAP_IDX, AWSS_STATIS_TYPE_PASSWD_ERR);
         }
     } while (0);
 
-    awss_trace("Sending message to app: %s", msg);
-    awss_trace("switch to ap: '%s'", ssid);
+    awss_trace("Sending msg to app: %s", msg);
+
     char topic[TOPIC_LEN_MAX] = {0};
     uint16_t msgid = -1;
     awss_build_topic((const char *)TOPIC_AWSS_DEV_AP_SWITCHAP, topic, TOPIC_LEN_MAX);
@@ -262,7 +262,7 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
             break;
 
         while (wait_ms > 0 && awss_dev_ap_switchap_resp_suc == 0 && awss_dev_ap_ongoing) {
-            os_msleep(100);
+            awss_msleep(100);
             wait_ms -= 100;
         }
         awss_cmp_coap_cancel_packet(msgid);
@@ -286,8 +286,8 @@ int wifimgr_process_dev_ap_switchap_request(void *ctx, void *resource, void *rem
 
 DEV_AP_SWITCHAP_END:
     dev_ap_switchap_parsed = 0;
-    if (dev_info) os_free(dev_info);
-    if (msg) os_free(msg);
+    if (dev_info) awss_free(dev_info);
+    if (msg) awss_free(msg);
     return ret;
 }
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */

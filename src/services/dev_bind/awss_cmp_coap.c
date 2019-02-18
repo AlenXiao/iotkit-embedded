@@ -38,21 +38,21 @@ int awss_release_coap_ctx(void *session)
 
     if (ctx->request) {
         void *payload = ((struct CoAPMessage *)ctx->request)->payload;
-        if (payload) os_free(payload);
-        os_free(ctx->request);
+        if (payload) awss_free(payload);
+        awss_free(ctx->request);
     }
-    if (ctx->remote) os_free(ctx->remote);
-    os_free(ctx);
+    if (ctx->remote) awss_free(ctx->remote);
+    awss_free(ctx);
     return 0;
 }
 
 void *awss_cpy_coap_ctx(void *request, void *remote, char mcast)
 {
-    struct coap_session_ctx_t *ctx = os_zalloc(sizeof(struct coap_session_ctx_t));
+    struct coap_session_ctx_t *ctx = awss_zalloc(sizeof(struct coap_session_ctx_t));
     if (ctx == NULL)
         goto CPY_CTX_FAIL;
 
-    ctx->request = os_zalloc(sizeof(struct CoAPMessage));
+    ctx->request = awss_zalloc(sizeof(struct CoAPMessage));
     if (ctx->request == NULL)
         goto CPY_CTX_FAIL;
 
@@ -67,14 +67,14 @@ void *awss_cpy_coap_ctx(void *request, void *remote, char mcast)
         if (payload == NULL)
             break;
 
-        req->payload = os_zalloc(len + 1);
+        req->payload = awss_zalloc(len + 1);
         if (req->payload == NULL)
             goto CPY_CTX_FAIL;
 
         memcpy(req->payload, payload, len);
     } while (0);
 
-    ctx->remote = os_zalloc(sizeof(platform_netaddr_t));
+    ctx->remote = awss_zalloc(sizeof(platform_netaddr_t));
     if (ctx->remote == NULL)
         goto CPY_CTX_FAIL;
 
@@ -177,7 +177,8 @@ const struct awss_cmp_couple awss_local_couple[] = {
     {AWSS_LC_INIT_SUC,                       TOPIC_AWSS_GET_CONNECTAP_INFO_MCAST, awss_process_mcast_get_connectap_info},
     {AWSS_LC_INIT_SUC,                       TOPIC_AWSS_GET_CONNECTAP_INFO_UCAST, awss_process_ucast_get_connectap_info},
 #ifndef AWSS_DISABLE_REGISTRAR
-    {AWSS_LC_INIT_BIND,                      TOPIC_NOTIFY,                        online_dev_bind_monitor},
+    {AWSS_LC_INIT_BIND,                      TOPIC_NOTIFY,                        awss_enrollee_suc_monitor},
+    {AWSS_LC_INIT_BIND,                      TOPIC_NOTIFY,                        awss_enrollee_suc_monitor},
 #endif
 #endif
     {AWSS_LC_INIT_SUC,                       TOPIC_GETDEVICEINFO_MCAST,           online_mcast_get_device_info},

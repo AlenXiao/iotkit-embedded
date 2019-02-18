@@ -3,9 +3,9 @@
  */
 
 #include <stdlib.h>
-#include <string.h>            // strcpy, memset()
-#include <ctype.h>             // isascii()
-#include <stdio.h>             // snprintf
+#include <string.h>            /* strcpy, memset() */
+#include <ctype.h>             /* isascii() */
+#include <stdio.h>             /* snprintf */
 #include "os.h"
 #include "zconfig_utils.h"
 #include "zconfig_ieee80211.h"
@@ -44,6 +44,11 @@ uint8_t zconfig_finished;
 /* global data structure, which hold all broadcast data */
 struct zconfig_data *zconfig_data;
 
+int zconfig_is_valid_channel(int channel)
+{
+    return (ZC_MIN_CHANNEL <= channel && channel <= ZC_MAX_CHANNEL);
+}
+
 /*
  * 8bit -> x bit
  *
@@ -61,7 +66,7 @@ void encode_chinese(uint8_t *in, uint8_t in_len,
         uint8_t bit[ZC_MAX_SSID_LEN * 8] = {0};
         uint8_t output_len = ((in_len * 8) + bits - 1) / bits;
 
-        // char to bit stream
+        /* char to bit stream */
         for (i = 0; i < in_len; i ++) {
             for (j = 0; j < 8; j ++) {
                 bit[i * 8 + j] = (in[i] >> j) & 0x01;
@@ -92,14 +97,14 @@ void decode_chinese(uint8_t *in, uint8_t in_len,
     do {
         uint8_t i, j;
         uint8_t output_len = (in_len * bits) / 8;
-        uint8_t *bit = (uint8_t *)os_zalloc(in_len * bits);
+        uint8_t *bit = (uint8_t *)awss_zalloc(in_len * bits);
 
         if (bit == NULL) {
-            awss_crit("decode malloc failed!\r\n");
+            awss_err("decode malloc failed!\n");
             return;
         }
 
-        // char to bit stream
+        /* char to bit stream */
         for (i = 0; i < in_len; i ++) {
             for (j = 0; j < bits; j ++) {
                 bit[i * bits + j] = (in[i] >> j) & 0x01;
@@ -113,7 +118,7 @@ void decode_chinese(uint8_t *in, uint8_t in_len,
             }
         }
 
-        os_free(bit);
+        awss_free(bit);
         if (out_len) {
             *out_len = output_len;
         }
@@ -136,7 +141,7 @@ uint8_t is_channel_locked(void)
 uint8_t zconfig_callback_channel_locked(uint8_t channel)
 {
     if (channel != zconfig_channel_locked) {
-        awss_info("channel lock @ %d\r\n", channel);
+        awss_trace("chan lock @ %d\n", channel);
         zconfig_channel_locked = channel;
     }
 
@@ -153,7 +158,7 @@ uint8_t zconfig_callback_over(uint8_t *ssid, uint8_t *passwd, uint8_t *bssid)
 {
     uint8_t auth = ZC_AUTH_TYPE_INVALID, encry = ZC_ENC_TYPE_INVALID, channel = 0;
 
-    awss_info("zconfig done. ssid:%s, mac:%02x%02x%02x%02x%02x%02x\r\n",
+    awss_trace("zconfig done. ssid:%s, mac:%02x%02x%02x%02x%02x%02x\n",
                ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
 
     if (zconfig_finished) {
@@ -180,15 +185,15 @@ void zconfig_set_state(uint8_t state, uint8_t tods, uint8_t channel)
         case STATE_CHN_SCANNING:
             break;
         case STATE_CHN_LOCKED_BY_P2P:
-            //locked state used by action/wps frame
+            /* locked state used by action/wps frame */
             zconfig_callback_channel_locked(channel);
             break;
         case STATE_CHN_LOCKED_BY_BR:
-            //locked state used by br frame
+            /* locked state used by br frame */
             zconfig_callback_channel_locked(zc_channel ? zc_channel : channel);
             break;
         case STATE_RCV_DONE:
-            // prevent main_thread_func to free zconfig_data until curent task is finished.
+            /* prevent main_thread_func to free zconfig_data until curent task is finished. */
             os_mutex_lock(zc_mutex);
             /*
              * in case of p2p/router, direct into RCV_DONE state,
@@ -278,7 +283,7 @@ int zconfig_recv_callback(void *pkt_data, uint32_t pkt_length, uint8_t channel,
 /* init mem & timer */
 void zconfig_init()
 {
-    awss_info("%s\r\n", __func__);
+    awss_info("%s\n", __func__);
 
     zconfig_channel_locked = INVALID_CHANNEL;
     zconfig_finished = 0;
@@ -286,7 +291,7 @@ void zconfig_init()
     memset(br_mac, 0xff, ETH_ALEN);
     memset(zero_mac, 0x00, ETH_ALEN);
 
-    zconfig_data = (struct zconfig_data *)os_zalloc(sizeof(struct zconfig_data));
+    zconfig_data = (struct zconfig_data *)awss_zalloc(sizeof(struct zconfig_data));
     if (zconfig_data == NULL) {
         goto ZCONFIG_INIT_FAIL;
     }
@@ -312,7 +317,7 @@ void zconfig_init()
     return;
 
 ZCONFIG_INIT_FAIL:
-    awss_crit("malloc failed!\r\n");
+    awss_err("malloc failed!\n");
     zconfig_destroy();
 
 #ifdef AWSS_SUPPORT_APLIST
@@ -330,7 +335,7 @@ void zconfig_destroy(void)
         if (zc_mutex) {
             os_mutex_destroy(zc_mutex);
         }
-        os_free((void *)zconfig_data);
+        awss_free((void *)zconfig_data);
         zconfig_data = NULL;
     }
 }

@@ -8,8 +8,7 @@
 #include <stdint.h>
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
-extern "C"
-{
+extern "C" {
 #endif
 
 /* auth type */

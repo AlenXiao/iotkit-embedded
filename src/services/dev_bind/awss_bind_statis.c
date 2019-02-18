@@ -36,10 +36,10 @@ int awss_bind_report_statis(const char *module)
     int len = 0;
     int ret;
 
-    log_content = os_zalloc(AWSS_STATIS_DB_BUF_LEN + 1);
+    log_content = awss_zalloc(AWSS_STATIS_DB_BUF_LEN + 1);
     if (log_content == NULL)
         goto BIND_STATIS_ERR;
-    log_buf = os_zalloc(log_buf_len + 1);
+    log_buf = awss_zalloc(log_buf_len + 1);
     if (log_buf == NULL)
         goto BIND_STATIS_ERR;
 
@@ -75,14 +75,14 @@ int awss_bind_report_statis(const char *module)
     if (awss_statis_db_mutex)
         HAL_MutexUnlock(awss_statis_db_mutex);
 
-    os_free(log_buf);
-    os_free(log_content);
+    awss_free(log_buf);
+    awss_free(log_content);
 
     return 0;
 
 BIND_STATIS_ERR:
-    if (log_content) os_free(log_content);
-    if (log_buf) os_free(log_buf);
+    if (log_content) awss_free(log_content);
+    if (log_buf) awss_free(log_buf);
     return -1;
 }
 

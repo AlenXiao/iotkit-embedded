@@ -48,12 +48,13 @@ void awss_report_reset_reply(void *pcontext, void *pclient, void *mesg)
     report_reset_timer = NULL;
 
     AWSS_RST_UPDATE_STATIS(AWSS_RST_STATIS_SUC);
-
-    iotx_event_post(IOTX_RESET);  // for old version of event
-    do {  // for new version of event
+    iotx_event_post(IOTX_RESET);  /* for old version of event */
+    do {  /* for new version of event */
         void *cb = NULL;
         cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
-        if (cb == NULL) break;
+        if (cb == NULL) {
+            break;
+        }
         ((int (*)(int))cb)(IOTX_RESET);
     } while (0);
 
@@ -124,8 +125,12 @@ static int awss_report_reset_to_cloud()
     log_debug("[RST]", "report reset result:%d\r\n", ret);
 
 REPORT_RST_ERR:
-    if (packet) AWSS_RESET_FREE(packet);
-    if (topic) AWSS_RESET_FREE(topic);
+    if (packet) {
+        AWSS_RESET_FREE(packet);
+    }
+    if (topic) {
+        AWSS_RESET_FREE(topic);
+    }
     return ret;
 }
 
@@ -147,7 +152,7 @@ int awss_check_reset()
 
     HAL_Kv_Get(AWSS_KV_RST, &rst, &len);
 
-    if (rst != 0x01) { // reset flag is not set
+    if (rst != 0x01) { /* reset flag is not set */
         log_debug("[RST]", "no rst\r\n");
         return 0;
     }
@@ -159,8 +164,9 @@ int awss_check_reset()
 
 int awss_stop_report_reset()
 {
-    if (report_reset_timer == NULL)
+    if (report_reset_timer == NULL) {
         return 0;
+    }
 
     HAL_Timer_Stop(report_reset_timer);
     HAL_Timer_Delete(report_reset_timer);

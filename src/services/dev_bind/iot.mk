@@ -6,3 +6,6 @@ HDR_REFS        += src/protocol/coap/local
 HDR_REFS        += src/sdk-impl
 HDR_REFS        += src/services/awss
 HDR_REFS        += src/services/linkkit/dev_reset
+HDR_REFS        += src/services/dev_bind
+
+CFLAGS          += -DAWSS_SUPPORT_DEV_BIND_STATIS
