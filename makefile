@@ -12,29 +12,10 @@ COMP_LIB_COMPONENTS := \
     src/infra/utils \
     src/infra/log \
 
-$(call CompLib_Map, FEATURE_COAP_COMM_ENABLED,  src/protocol/coap/cloud)
-
-$(call CompLib_Map, FEATURE_DEVICE_MODEL_ENABLED, \
-    src/services/linkkit/ntp \
-    src/services/linkkit/dev_reset \
-)
 $(call CompLib_Map, FEATURE_WIFI_PROVISION_ENABLED, \
-    src/protocol/coap/local \
     src/services/awss \
+    src/services/common \
 )
-$(call CompLib_Map, FEATURE_DEV_BIND_ENABLED, \
-    src/protocol/coap/local \
-    src/services/dev_bind \
-)
-
-# 'Opt1 = y' and 'Opt2 = y' conflicts with each other
-#
-$(call Conflict_Relation, FEATURE_SUPPORT_TLS, FEATURE_SUPPORT_ITLS)
-$(call Conflict_Relation, FEATURE_MAL_ENABLED, FEATURE_MQTT_COMM_ENABLED)
-
-# 'Opt1 = n' and 'Opt2 = n' conflicts with each other
-#
-$(call Present1_Relation, FEATURE_MQTT_DIRECT, FEATURE_SUPPORT_TLS)
 
 
 # 'Opt1 = y' requires 'Opt2 = y' as mandantory support

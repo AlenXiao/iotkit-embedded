@@ -37,9 +37,9 @@ $(ROOT_DIR)middleware/linkkit/sdk-c/include \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/coap/local \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/ntp \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/dev_reset \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind/os \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind/utility \
+$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common \
+$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common/os \
+$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common/utility \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/awss \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/utils/misc  \
 
@@ -62,7 +62,7 @@ ifeq (y,$(FEATURE_SUPPORT_TLS))
 endif
 
 ifeq (y,$(FEATURE_DEV_BIND_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/dev_bind \
+$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/common \
     middleware/linkkit/sdk-c/src/protocol/coap/local
 endif
 

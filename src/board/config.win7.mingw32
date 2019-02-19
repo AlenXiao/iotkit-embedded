@@ -12,4 +12,4 @@ CONFIG_src/protocol/coap/cloud  :=
 CONFIG_src/services/uOTA        :=
 CONFIG_tests                    :=
 CONFIG_src/services/awss        :=
-CONFIG_src/services/dev_bind    :=
+CONFIG_src/services/common    :=

@@ -9,15 +9,10 @@ INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/infra/system/facility)
 INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/infra/utils)
 INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/infra/utils/digest)
 INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/infra/utils/misc)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/protocol/mqtt/)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/protocol/mqtt/MQTTPacket)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/protocol/mqtt/client)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/sdk-impl/)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/sdk-impl/deprecated_linkkit)
 INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/awss/)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/dev_bind/)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/dev_bind/os)
-INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/dev_bind/os/product)
+INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/common/)
+INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/common/os)
+INCLUDE_DIRECTORIES (${PROJECT_SOURCE_DIR}/src/services/common/os/product)
 
 FILE (GLOB src_services_awss_SRCS
     ${PROJECT_SOURCE_DIR}/src/services/awss/*.c
