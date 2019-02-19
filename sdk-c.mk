@@ -30,45 +30,18 @@ $(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/utils/digest \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/utils \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/utils/misc \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/log \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/system \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include/exports \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include/imports \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/coap/local \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/ntp \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/dev_reset \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common/os \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/common/utility \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/awss \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/utils/misc  \
 
-#from src/tools/default_settings.mk
-GLOBAL_DEFINES  += \
-    COAP_SERV_MULTITHREAD \
-
-#####################################################################
-# Configs for component middleware.linkkit.sdk-c
-#
-# middleware/linkkit/sdk-c/src/infra/utils
-#$(NAME)_COMPONENTS += \
-#    middleware/linkkit/sdk-c/src/infra/log \
-#    middleware/linkkit/sdk-c/src/infra/system \
-#    middleware/linkkit/sdk-c/src/sdk-impl \
-#    middleware/linkkit/sdk-c/src/ref-impl/hal
-
-ifeq (y,$(FEATURE_SUPPORT_TLS))
-#$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/ref-impl/tls
-endif
-
-ifeq (y,$(FEATURE_DEV_BIND_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/common \
-    middleware/linkkit/sdk-c/src/protocol/coap/local
-endif
-
 ifeq (y,$(FEATURE_WIFI_PROVISION_ENABLED))
 $(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/awss \
-    middleware/linkkit/sdk-c/src/protocol/coap/local
+    middleware/linkkit/sdk-c/src/services/common
 endif
 
 #####################################################################
@@ -76,7 +49,6 @@ endif
 #
 SWITCH_VARS :=  \
     FEATURE_WIFI_PROVISION_ENABLED \
-    FEATURE_DEV_BIND_ENABLED \
     FEATURE_SUPPORT_ITLS \
     FEATURE_SUPPORT_TLS
 
@@ -88,15 +60,3 @@ $(foreach v, \
     $(if $(filter y,$($(v))), \
         $(eval GLOBAL_CFLAGS += -D$(subst FEATURE_,,$(v)))) \
 )
-
-# FEATURE_DEVICE_MODEL_ENABLED
-ifeq (y,$(strip $(FEATURE_DEVICE_MODEL_ENABLED)))
-    ifeq (y,$(strip $(FEATURE_DEVICE_MODEL_GATEWAY)))
-        GLOBAL_CFLAGS += -DCONFIG_SDK_THREAD_COST=1
-    endif
-endif
-
-# FEATURE_HTTP2_COMM_ENABLED
-ifeq (y,$(strip $(FEATURE_HTTP2_COMM_ENABLED)))
-    GLOBAL_CFLAGS := $(filter-out -DFORCE_SSL_VERIFY,$(GLOBAL_CFLAGS))
-endif
