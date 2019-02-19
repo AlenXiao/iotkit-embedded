@@ -14,15 +14,9 @@
 #include "zconfig_protocol.h"
 #include "awss_timer.h"
 #include "awss_enrollee.h"
-#include "awss_adha.h"
-#include "awss_aha.h"
 #include "awss_wps.h"
 #include "awss_aplist.h"
 #include "awss_smartconfig.h"
-
-#ifdef AWSS_SUPPORT_HT40
-    #include "awss_ht40.h"
-#endif
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
 extern "C" {
@@ -783,17 +777,8 @@ uint8_t *zconfig_remove_link_header(uint8_t **in, int *len, int link_type)
 }
 
 struct awss_protocol_couple_type awss_protocol_couple_array[] = {
-#ifdef AWSS_SUPPORT_HT40
-    {ALINK_HT_CTRL,      awss_ieee80211_ht_ctrl_process,     awss_recv_callback_ht_ctrl},
-#endif
 #ifdef AWSS_SUPPORT_APLIST
     {ALINK_APLIST,       awss_ieee80211_aplist_process,      NULL},
-#endif
-#ifdef AWSS_SUPPORT_AHA
-    {ALINK_DEFAULT_SSID, awss_ieee80211_aha_process,         awss_recv_callback_aha_ssid},
-#endif
-#ifdef AWSS_SUPPORT_ADHA
-    {ALINK_ADHA_SSID,    awss_ieee80211_adha_process,        awss_recv_callback_adha_ssid},
 #endif
 #ifndef AWSS_DISABLE_ENROLLEE
     {ALINK_ZERO_CONFIG,  awss_ieee80211_zconfig_process,     awss_recv_callback_zconfig},

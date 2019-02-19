@@ -6,15 +6,10 @@
 #include "awss_main.h"
 #include "zconfig_utils.h"
 #include "awss_enrollee.h"
-#include "awss_cmp.h"
-#include "awss_info.h"
-#include "awss_notify.h"
-#include "awss_timer.h"
 #include "awss_packet.h"
+#include "awss_timer.h"
 #include "awss_statis.h"
 #include "awss_event.h"
-#include "awss_adha.h"
-#include "awss_aha.h"
 #include "passwd.h"
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
@@ -23,25 +18,11 @@ extern "C" {
 
 #define AWSS_PRESS_TIMEOUT_MS  (60000)
 
-extern int switch_ap_done;
 static uint8_t awss_stopped = 1;
 static uint8_t g_user_press = 0;
 static void *press_timer = NULL;
 
 static void awss_press_timeout(void);
-
-int awss_success_notify(void)
-{
-    g_user_press = 0;
-    awss_press_timeout();
-
-    awss_cmp_local_init(AWSS_LC_INIT_SUC);
-    awss_suc_notify_stop();
-    awss_suc_notify();
-    awss_start_connectap_monitor();
-    AWSS_DISP_STATIS();
-    return 0;
-}
 
 int awss_start(void)
 {
@@ -56,80 +37,6 @@ int awss_start(void)
 
     do {
         __awss_start();
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-        do {
-            char ssid[PLATFORM_MAX_SSID_LEN + 1] = {0};
-#ifdef AWSS_SUPPORT_ADHA
-            while (1) {
-                memset(ssid, 0, sizeof(ssid));
-                os_wifi_get_ap_info(ssid, NULL, NULL);
-                awss_debug("start, ssid:%s, strlen:%d\n", ssid, strlen(ssid));
-                if (strlen(ssid) > 0 && strcmp(ssid, ADHA_SSID)) { /* not adha AP */
-                    break;
-                }
-
-                if (os_sys_net_is_ready()) { /* skip the adha failed */
-                    awss_cmp_local_init(AWSS_LC_INIT_ROUTER);
-
-                    awss_open_adha_monitor();
-                    while (!awss_is_ready_switch_next_adha()) {
-                        if (awss_stopped)
-                            break;
-                        awss_msleep(50);
-                    }
-                    awss_cmp_local_deinit(0);
-                }
-
-                if (switch_ap_done || awss_stopped) {
-                    break;
-                }
-                __awss_start();
-            }
-#endif
-            if (awss_stopped) {
-                break;
-            }
-
-            if (switch_ap_done) {
-                break;
-            }
-            os_wifi_get_ap_info(ssid , NULL, NULL);
-            if (strlen(ssid) > 0 && strcmp(ssid, DEFAULT_SSID)) { /* not AHA */
-                break;
-            }
-
-            if (os_sys_net_is_ready()) {
-                awss_open_aha_monitor();
-
-                awss_cmp_local_init(AWSS_LC_INIT_PAP);
-                char dest_ap = 0;
-                while (!awss_aha_monitor_is_timeout()) {
-                    memset(ssid, 0, sizeof(ssid));
-                    os_wifi_get_ap_info(ssid, NULL, NULL);
-                    if (os_sys_net_is_ready() &&
-                        strlen(ssid) > 0 && strcmp(ssid, DEFAULT_SSID)) {  /* not AHA */
-                        dest_ap = 1;
-                        break;
-                    }
-                    if (awss_stopped)
-                        break;
-                    awss_msleep(50);
-                }
-
-                awss_cmp_local_deinit(0);
-
-                if (switch_ap_done || awss_stopped) {
-                    break;
-                }
-
-                if (dest_ap == 1) {
-                    break;
-                }
-            }
-            awss_event_post(AWSS_ENABLE_TIMEOUT);
-            __awss_start();
-        } while (1);
-#endif
         if (awss_stopped) {
             break;
         }
@@ -142,14 +49,6 @@ int awss_start(void)
     if (awss_stopped)
         return -1;
 
-#ifdef AWSS_SUPPORT_AHA
-    awss_close_aha_monitor();
-#endif
-#ifdef AWSS_SUPPORT_ADHA
-    awss_close_adha_monitor();
-#endif
-
-    awss_success_notify();
     awss_stopped = 1;
 
     return 0;
@@ -158,13 +57,6 @@ int awss_start(void)
 int awss_stop(void)
 {
     awss_stopped = 1;
-#ifdef AWSS_SUPPORT_AHA
-    awss_close_aha_monitor();
-#endif
-#ifdef AWSS_SUPPORT_ADHA
-    awss_close_adha_monitor();
-#endif
-    awss_stop_connectap_monitor();
     g_user_press = 0;
     awss_press_timeout();
 

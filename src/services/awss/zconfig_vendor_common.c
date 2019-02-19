@@ -5,8 +5,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "aws_lib.h"
-#include "awss_aha.h"
-#include "awss_adha.h"
 #include "awss_aplist.h"
 #include "zconfig_lib.h"
 #include "zconfig_utils.h"
@@ -305,7 +303,7 @@ rescanning:
             break;
         }
 
-        int interval = (os_awss_get_channelscan_interval_ms() + 2) / 3;
+        int interval = (os_awss_get_channelscan_interval_ms() + 1) / 2;
         if (interval < 1) {
             interval = 1;
         }
@@ -314,14 +312,6 @@ rescanning:
         awss_msleep(interval);
 #ifndef AWSS_DISABLE_ENROLLEE
         awss_broadcast_enrollee_info();
-#endif
-        awss_msleep(interval);
-#ifdef AWSS_SUPPORT_ADHA
-        aws_send_adha_probe_req();
-#endif
-        awss_msleep(interval);
-#ifdef AWSS_SUPPORT_AHA
-        aws_send_aha_probe_req();
 #endif
     }
 
@@ -410,14 +400,7 @@ success:
 
     if (aws_stop == AWS_STOPPED) {
         zconfig_force_destroy();
-    }
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-    else if (strcmp((const char *)aws_result_ssid, (const char *)zc_adha_ssid) == 0 ||
-        strcmp((const char *)aws_result_ssid, (const char *)zc_default_ssid) == 0) {
-        zconfig_destroy();
-    }
-#endif
-    else {
+    } else {
         zconfig_force_destroy();
     }
 }

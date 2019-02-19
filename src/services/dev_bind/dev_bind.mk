@@ -13,10 +13,8 @@ $(NAME)_INCLUDES += ../awss
 endif
 
 $(NAME)_SOURCES :=
-$(NAME)_SOURCES += awss_bind.c      awss_cmp_mqtt.c  awss_report.c
-$(NAME)_SOURCES += awss_cmp_coap.c  awss_notify.c    awss_timer.c
-$(NAME)_SOURCES += passwd.c         awss_packet.c    os/os_misc.c
-$(NAME)_SOURCES += awss_event.c     awss_bind_statis.c
+$(NAME)_SOURCES += awss_timer.c   passwd.c            os/os_misc.c
+$(NAME)_SOURCES += awss_event.c   awss_bind_statis.c
 
 $(NAME)_DEFINES += DEBUG
 

@@ -12,16 +12,7 @@ extern "C"
 
 int awss_event_post(int event)
 {
-    int ret = 0;
-    void *cb = NULL;
-
-    ret = iotx_event_post(event);
-
-    //cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
-    if (cb)
-        ret = ((int (*)(int))cb)(event);
-
-    return ret;
+    return iotx_event_post(event);
 }
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */

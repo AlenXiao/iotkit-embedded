@@ -11,8 +11,6 @@
 #include "zconfig_ieee80211.h"
 #include "zconfig_protocol.h"
 #include "passwd.h"
-#include "awss_aha.h"
-#include "awss_adha.h"
 #include "awss_aplist.h"
 #include "awss_smartconfig.h"
 #include "awss_main.h"

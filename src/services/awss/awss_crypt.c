@@ -9,7 +9,6 @@
 #include "awss_utils.h"
 #include "passwd.h"
 #include "awss_log.h"
-#include "awss_wifimgr.h"
 #include "awss_crypt.h"
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */

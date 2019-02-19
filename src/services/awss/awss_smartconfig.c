@@ -1,9 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "awss.h"
-#include "awss_aha.h"
 #include "awss_log.h"
-#include "awss_adha.h"
 #include "awss_main.h"
 #include "awss_event.h"
 #include "awss_crypt.h"
@@ -342,13 +340,6 @@ int zconfig_get_ssid_passwd(uint8_t tods)
             ap = zconfig_get_apinfo(zc_bssid);
             if (ap == NULL || ap->ssid[0] == '\0')
                 break;
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-            if (strncmp(ap->ssid, zc_adha_ssid, ZC_MAX_SSID_LEN) == 0 ||
-                strncmp(ap->ssid, zc_default_ssid, ZC_MAX_SSID_LEN) == 0) {
-                memset(zc_bssid, 0, ETH_ALEN);
-                break;
-            }
-#endif
             strncpy((char *)zc_ssid, (const char *)ap->ssid, ZC_MAX_SSID_LEN - 1);
         } while (0);
 #endif

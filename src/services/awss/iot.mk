@@ -10,24 +10,9 @@ ifneq (,$(filter -DWIFI_PROVISION_ENABLED,$(CFLAGS)))
     CFLAGS      += -DAWSS_SUPPORT_APLIST
     CFLAGS      += -DAWSS_SUPPORT_STATIS
 
-    ifneq (,$(filter -DAWSS_SUPPORT_DEV_AP,$(CFLAGS)))
-        CFLAGS  += -DAWSS_SUPPORT_DEV_AP
-    endif
-
     ifneq (,$(filter -DAWSS_SUPPORT_SMARTCONFIG,$(CFLAGS)))
         CFLAGS  += -DAWSS_SUPPORT_SMARTCONFIG \
                    -DAWSS_SUPPORT_SMARTCONFIG_WPS
-    endif
-
-    ifneq (,$(filter -DAWSS_SUPPORT_PHONEASAP,$(CFLAGS)))
-        CFLAGS  := $(filter-out -DAWSS_SUPPORT_AHA,$(CFLAGS))
-        CFLAGS  += -DAWSS_SUPPORT_AHA
-    endif
-
-    ifneq (,$(filter -DAWSS_SUPPORT_ROUTER,$(CFLAGS)))
-        CFLAGS  := $(filter-out -DAWSS_SUPPORT_AHA,$(CFLAGS))
-        CFLAGS  += -DAWSS_SUPPORT_AHA \
-                   -DAWSS_SUPPORT_ADHA
     endif
 
     ifeq (,$(filter -DAWSS_SUPPORT_ZEROCONFIG,$(CFLAGS)))

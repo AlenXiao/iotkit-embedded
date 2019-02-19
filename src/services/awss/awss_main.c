@@ -8,11 +8,9 @@
 #include "zconfig_utils.h"
 #include "awss_enrollee.h"
 #include "awss_packet.h"
-#include "awss_notify.h"
 #include "awss_statis.h"
 #include "awss_event.h"
 #include "awss_main.h"
-#include "awss_cmp.h"
 #include "passwd.h"
 #include "awss.h"
 #include "os.h"
@@ -52,20 +50,9 @@ int __awss_start(void)
     aws_destroy();
 
     do {
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-        char awss_notify_needed = 1;
-        int adha = 0;
-#endif
-
         if (awss_stop_connecting || strlen(ssid) == 0) {
             break;
         }
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-        if ((adha = strcmp(ssid, ADHA_SSID)) == 0 || strcmp(ssid, DEFAULT_SSID) == 0) {
-            awss_notify_needed = 0;
-            awss_event_post(adha != 0 ? AWSS_CONNECT_AHA : AWSS_CONNECT_ADHA);
-        } else
-#endif
         {
             awss_event_post(AWSS_CONNECT_ROUTER);
             AWSS_UPDATE_STATIS(AWSS_STATIS_CONN_ROUTER_IDX, AWSS_STATIS_TYPE_TIME_START);
@@ -77,28 +64,11 @@ int __awss_start(void)
         if (!ret) {
             awss_event_post(AWSS_GOT_IP);
 
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-            if (awss_notify_needed == 0) {
-                awss_dev_bind_notify_stop();
-                awss_suc_notify_stop();
-                awss_cmp_local_init(adha == 0 ? AWSS_LC_INIT_ROUTER : AWSS_LC_INIT_PAP);
-                awss_devinfo_notify();
-                if (adha == 0)
-                    AWSS_UPDATE_STATIS(AWSS_STATIS_ROUTE_IDX, AWSS_STATIS_TYPE_TIME_SUC);
-                awss_event_post(AWSS_SETUP_NOTIFY);
-            } else
-#endif
             {
                 AWSS_UPDATE_STATIS(AWSS_STATIS_CONN_ROUTER_IDX, AWSS_STATIS_TYPE_TIME_SUC);
-                awss_devinfo_notify_stop();
                 produce_random(aes_random, sizeof(aes_random));
             }
         } else {
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-            if (awss_notify_needed == 0) {
-                awss_event_post(adha != 0 ? AWSS_CONNECT_AHA_FAIL : AWSS_CONNECT_ADHA_FAIL);
-            } else
-#endif
             {
                 awss_event_post(AWSS_CONNECT_ROUTER_FAIL);
 #ifndef AWSS_DISABLE_ENROLLEE
@@ -117,18 +87,9 @@ int __awss_stop(void)
 {
     awss_stop_connecting = 1;
     aws_destroy();
-#if defined(AWSS_SUPPORT_ADHA) || defined(AWSS_SUPPORT_AHA)
-    awss_devinfo_notify_stop();
-#endif
-    awss_suc_notify_stop();
 #ifndef AWSS_DISABLE_REGISTRAR
     awss_registrar_deinit();
 #endif
-    if (awss_finished < 2) {
-        awss_cmp_local_deinit(1);
-    } else {
-        awss_cmp_local_deinit(0);
-    }
 
     while (1) {
         if (awss_finished) break;

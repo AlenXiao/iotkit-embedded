@@ -20,12 +20,10 @@
 #include "iotx_log.h"
 
 #include "utils_hmac.h"
-#include "utils_httpc.h"
 #include "lite-cjson.h"
 #include "lite-list.h"
 #include "string_utils.h"
 #include "json_parser.h"
-#include "utils_md5.h"
 #include "utils_sha256.h"
 
 #include "iot_import.h"

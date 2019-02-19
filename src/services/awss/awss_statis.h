@@ -6,7 +6,6 @@
 #define __AWSS_STATIS_H__
 
 #include <stdint.h>
-#include "awss_dev_ap.h"
 
 enum {
     AWSS_STATIS_CONN_ROUTER_IDX = 0,  /* Statistic for connection with router */
