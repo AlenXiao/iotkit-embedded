@@ -188,7 +188,7 @@ done)
         \$(filter-out %.a,\$^) \\
         $( if [ "${i}" = "sdk-testsuites" ] && uname -a|grep -qw Ubuntu; then echo "${TOP_DIR}/${IMPORT_VDRDIR}/${PREBUILT_LIBDIR}/libcurl.a"; fi ) \\
         -L${OUTPUT_DIR}/usr/lib \\
-        ${LFLAGS} $( if [ "${i}" = "sdk-testsuites" ] && ! uname -a|grep -qw Ubuntu; then echo "-lcurl"; fi )
+        ${LFLAGS} $( if [ "${i}" = "sdk-testsuites" ] && ! uname -a|grep -qw Ubuntu; then echo "-lcurl -lpthread"; fi )
 
 EOB
 done

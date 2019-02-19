@@ -7,7 +7,6 @@
 #include "iot_export.h"
 #include "iot_import.h"
 #include "iotx_utils.h"
-#include "iotx_system.h"
 #include "iotx_log.h"
 #include "awss_reset.h"
 #include "awss_reset_statis.h"
@@ -51,7 +50,7 @@ void awss_report_reset_reply(void *pcontext, void *pclient, void *mesg)
     iotx_event_post(IOTX_RESET);  /* for old version of event */
     do {  /* for new version of event */
         void *cb = NULL;
-        cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
+        //cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
         if (cb == NULL) {
             break;
         }

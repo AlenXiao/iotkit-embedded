@@ -34,7 +34,6 @@ $(ROOT_DIR)middleware/linkkit/sdk-c/src/infra/system \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include/exports \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include/imports \
 $(ROOT_DIR)middleware/linkkit/sdk-c/include \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/alcs \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/coap/local \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/ntp \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/dev_reset \
@@ -42,16 +41,7 @@ $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind/os \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/dev_bind/utility \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/services/awss \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/dm \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/linkkit/cm \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/mal \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/mdal/mal/ica \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/ota \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/services/ota/impl \
 $(ROOT_DIR)middleware/linkkit/sdk-c/src/utils/misc  \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/sdk-impl \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/mqtt \
-$(ROOT_DIR)middleware/linkkit/sdk-c/src/protocol/mqtt/client
 
 #from src/tools/default_settings.mk
 GLOBAL_DEFINES  += \
@@ -67,19 +57,8 @@ GLOBAL_DEFINES  += \
 #    middleware/linkkit/sdk-c/src/sdk-impl \
 #    middleware/linkkit/sdk-c/src/ref-impl/hal
 
-ifeq (y,$(FEATURE_MAL_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/mdal/mal
-ifeq (y,$(FEATURE_MAL_ICA_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/mdal/mal/ica
-endif
-endif
 ifeq (y,$(FEATURE_SUPPORT_TLS))
 #$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/ref-impl/tls
-endif
-
-ifeq (y,$(FEATURE_DEVICE_MODEL_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/linkkit/dev_reset
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/linkkit/ntp
 endif
 
 ifeq (y,$(FEATURE_DEV_BIND_ENABLED))
@@ -92,58 +71,12 @@ $(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/awss \
     middleware/linkkit/sdk-c/src/protocol/coap/local
 endif
 
-ifeq (y,$(FEATURE_MQTT_COMM_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/protocol/mqtt
-endif
-
-ifeq (y,$(FEATURE_OTA_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/ota
-endif
-
-ifeq (y,$(FEATURE_MQTT_SHADOW))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/shadow
-endif
-
-ifeq (y,$(FEATURE_COAP_COMM_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/protocol/coap/cloud
-endif
-
-ifeq (y,$(FEATURE_HTTP_COMM_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/protocol/http
-endif
-
-ifeq (y,$(FEATURE_ALCS_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/protocol/alcs \
-    middleware/linkkit/sdk-c/src/protocol/coap/local
-endif
-
-ifeq (y,$(FEATURE_DEVICE_MODEL_ENABLED))
-$(NAME)_COMPONENTS += middleware/linkkit/sdk-c/src/services/linkkit/cm \
-    middleware/linkkit/sdk-c/src/services/linkkit/dm
-endif
-
-ifeq (y,$(FEATURE_HTTP2_COMM_ENABLED))
-$(NAME)_COMPONENTS += \
-    middleware/linkkit/sdk-c/src/protocol/http2  \
-    middleware/linkkit/sdk-c/src/services/http2_stream
-endif
-
 #####################################################################
 # Process dependencies of configurations
 #
 SWITCH_VARS :=  \
     FEATURE_WIFI_PROVISION_ENABLED \
     FEATURE_DEV_BIND_ENABLED \
-    FEATURE_ALCS_ENABLED \
-    FEATURE_COAP_COMM_ENABLED \
-    FEATURE_DEVICE_MODEL_GATEWAY \
-    FEATURE_HTTP2_COMM_ENABLED \
-    FEATURE_HTTP_COMM_ENABLED \
-    FEATURE_MQTT_COMM_ENABLED \
-    FEATURE_MQTT_DIRECT \
-    FEATURE_MQTT_SHADOW \
-    FEATURE_OTA_ENABLED \
-    FEATURE_DEVICE_MODEL_ENABLED \
     FEATURE_SUPPORT_ITLS \
     FEATURE_SUPPORT_TLS
 

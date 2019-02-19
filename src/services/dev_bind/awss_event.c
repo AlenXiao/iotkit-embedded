@@ -4,7 +4,6 @@
 
 #include "iot_import.h"
 #include "iot_export.h"
-#include "sdk-impl_internal.h"
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
 extern "C"
@@ -18,7 +17,7 @@ int awss_event_post(int event)
 
     ret = iotx_event_post(event);
 
-    cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
+    //cb = (void *)iotx_event_callback(ITE_AWSS_STATUS);
     if (cb)
         ret = ((int (*)(int))cb)(event);
 

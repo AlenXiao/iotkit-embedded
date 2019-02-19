@@ -4,11 +4,6 @@ set -e
 if [ "${OUTPUT_DIR}" = "" ] || [ ! -d ${OUTPUT_DIR} ]; then exit 1; fi
 
 PROGS=(
-    "./mqtt-example"
-    "./mqtt_rrpc-example unittest"
-    "./shadow-example"
-    "./sdk-testsuites"
-    "./coap-example -s dtls"
     "./http-example"
 )
 cd ${OUTPUT_DIR}/usr/bin
